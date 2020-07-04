@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"bytes"
 	"debug/elf"
+	"flag"
 	"os"
 	)
 
@@ -218,7 +219,12 @@ func print_header(hdr interface{}) {
 
 func main() {
 	var target elf_File;
-	target.Fh, target.Err = os.Open("/tmp/hello")
+	readheader := flag.String("-h", "", "Print out elf header of binary")
+	readsections := flag.String("-S", "", "Print out section headers")
+	flag.Parse()
+
+	bin := os.Args[3]
+	target.Fh, target.Err = os.Open(bin)
 	checkerror(target.Err)
 
 	target.Fh.Read(target.Ident[:16])
@@ -227,9 +233,16 @@ func main() {
 		fmt.Println("This is not an Elf binary\n")
 		os.Exit(1)
 	}
-
 	target.SetArch()
 	target.MapHeader()
+
+	switch os.Args[1]{
+	case "-h":
+		
+
+
+
+	}
 	target.GetSections()
 	fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
 	fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section32)[1].Size)
