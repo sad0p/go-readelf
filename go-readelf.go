@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"bytes"
 	"debug/elf"
-	"flag"
 	"os"
 	)
 
@@ -46,6 +45,10 @@ type elf_File struct{
 	Size int64
 }
 
+const (
+	SUCCESS int = 0
+	ERROR   int = 1
+)
 func (elf_fs *elf_File) Header(amb_elf_arch interface{}){
 	switch v := amb_elf_arch.(type) {
 		case *elf.Header32:
@@ -219,11 +222,14 @@ func print_header(hdr interface{}) {
 
 func main() {
 	var target elf_File;
-	readheader := flag.String("-h", "", "Print out elf header of binary")
-	readsections := flag.String("-S", "", "Print out section headers")
-	flag.Parse()
 
-	bin := os.Args[3]
+	if len(os.Args) < 3{
+		usage()
+		os.Exit(ERROR)
+
+	}
+
+	bin := os.Args[2]
 	target.Fh, target.Err = os.Open(bin)
 	checkerror(target.Err)
 
@@ -236,16 +242,41 @@ func main() {
 	target.SetArch()
 	target.MapHeader()
 
-	switch os.Args[1]{
-	case "-h":
-		
 
-
-
+	var optheader, optsections bool
+	options := os.Args[1]
+	if options[0] != '-' {
+		usage()
+		os.Exit(ERROR)
 	}
-	target.GetSections()
-	fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
-	fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section32)[1].Size)
+
+	for i := 1; i < len(options) ; i++ {
+		switch {
+		case options[i] == 'h':
+			fmt.Println("h flag present")
+			optheader = true
+		case options[i] == 'S':
+			fmt.Println("S flag present")
+			optsections = true
+		default:
+			fmt.Println("Unrecognizable parameters");
+			os.Exit(ERROR)
+		}
+	}
+
+	if optheader {
+		print_header(target.Hdr)
+	}
+
+	if optsections {
+		target.GetSections()
+		fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
+		fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section64)[1].Size)
+	}
+}
+
+func usage() {
+	fmt.Println("Usage information")
 }
 
 func checkerror(e error){
