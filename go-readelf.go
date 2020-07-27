@@ -21,11 +21,11 @@ import (
 // [9] Create functionality to print shared library dependencies
 // [10] Create functionality to locate a specific symbol
 
-type elfbin interface{
+type ElfBiner interface{
 	Header(amb_elf_arch interface{})
 }
 
-type enum_Ident struct{
+type EnumIdent struct{
 	Endianness binary.ByteOrder
 	Arch elf.Class
 }
@@ -35,10 +35,10 @@ type ShdrTble struct{
 	SectionName interface{}
 }
 
-type elf_File struct{
+type ElfFile struct{
 	Fh *os.File
 	Ident [16]byte
-	FileHdr enum_Ident
+	FileHdr EnumIdent
 	Hdr interface{}
 	Err error
 	ElfSections ShdrTble
@@ -49,7 +49,8 @@ const (
 	SUCCESS int = 0
 	ERROR   int = 1
 )
-func (elf_fs *elf_File) Header(amb_elf_arch interface{}){
+
+func (elf_fs *ElfFile) Header(amb_elf_arch interface{}){
 	switch v := amb_elf_arch.(type) {
 		case *elf.Header32:
 			fmt.Printf("Elf32 detected: %v\n", v)
@@ -60,7 +61,7 @@ func (elf_fs *elf_File) Header(amb_elf_arch interface{}){
 	}
 }
 
-func (elf_fs *elf_File) SetArch() {
+func (elf_fs *ElfFile) SetArch() {
 	switch elf.Class(elf_fs.Ident[elf.EI_CLASS]) {
 		case elf.ELFCLASS64:
 			elf_fs.Hdr = new(elf.Header64)
@@ -75,7 +76,7 @@ func (elf_fs *elf_File) SetArch() {
 	}
 }
 
-func (elf_fs *elf_File) MapHeader() {
+func (elf_fs *ElfFile) MapHeader() {
 
 	switch elf.Data(elf_fs.Ident[elf.EI_DATA]) {
 		case elf.ELFDATA2LSB:
@@ -88,11 +89,11 @@ func (elf_fs *elf_File) MapHeader() {
 
 	elf_fs.Fh.Seek(0, io.SeekStart)
 	err := binary.Read(elf_fs.Fh, elf_fs.FileHdr.Endianness, elf_fs.Hdr)
-	checkerror(err)
+	checkError(err)
 }
 
 
-func (elf_fs *elf_File) FindSectionByName(name string) {
+func (elf_fs *ElfFile) findSectionByName(name string) {
 	return
 }
 
@@ -102,86 +103,119 @@ func (elf_fs *elf_File) FindSectionByName(name string) {
 //Calculate the size of Section Header Table = Shnum * Shentsize
 
 
-func (elf_fs *elf_File) GetSections() {
-
-	var StrTabBuf bytes.Buffer
+func (elf_fs *ElfFile) getSections() {
 
 	if h, ok := elf_fs.Hdr.(*elf.Header64); ok {
-		Shentsize_ := h.Shentsize
-		Shnum_ := h.Shnum
-		ShdrTableSize := Shentsize_ * Shnum_
+		shdrTableSize := h.Shentsize * h.Shnum
 
-		elf_fs.ElfSections.Section = make([]elf.Section64, Shnum_)
-		elf_fs.ElfSections.SectionName = make([]string, Shnum_)
+		elf_fs.ElfSections.Section = make([]elf.Section64, h.Shnum)
+		elf_fs.ElfSections.SectionName = make([]string, h.Shnum)
 
-		sr := io.NewSectionReader(elf_fs.Fh, int64(h.Shoff), int64(ShdrTableSize))
+		sr := io.NewSectionReader(elf_fs.Fh, int64(h.Shoff), int64(shdrTableSize))
 		err := binary.Read(sr, elf_fs.FileHdr.Endianness, elf_fs.ElfSections.Section.([]elf.Section64))
-		checkerror(err)
+		checkError(err)
 
-		StrTable := make([]byte, elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size)
-		StrTableOff := elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Off
-		StrTableSize := elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size
+		strTable := make([]byte, elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size)
+		strTableOff := elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Off
+		strTableSize := elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size
 
-		StrTabSec := io.NewSectionReader(elf_fs.Fh, int64(StrTableOff), int64(StrTableSize) + int64(StrTableOff))
-		err = binary.Read(StrTabSec, elf_fs.FileHdr.Endianness, StrTable)
-		checkerror(err)
+		strTabSec := io.NewSectionReader(elf_fs.Fh, int64(strTableOff), int64(strTableSize) + int64(strTableOff))
+		err = binary.Read(strTabSec, elf_fs.FileHdr.Endianness, strTable)
+		checkError(err)
 
-		var SecStrEnd uint64
-		for i := 0; i < int(Shnum_); i++ {
-			SecStrStart := elf_fs.ElfSections.Section.([]elf.Section64)[i].Name
-			for SecStrEnd = uint64(SecStrStart); SecStrEnd < uint64(len(StrTable)); SecStrEnd++ {
-				if StrTable[SecStrEnd] == 0x0 {
-					break;
-				}
-			}
-
-			StrTabBuf.Write(StrTable[SecStrStart:SecStrEnd])
-			elf_fs.ElfSections.SectionName.([]string)[i] = StrTabBuf.String()
-			StrTabBuf.Reset()
+		for i := 0; i < int(h.Shnum); i++ {
+			strIndex := elf_fs.ElfSections.Section.([]elf.Section64)[i].Name
+			elf_fs.ElfSections.SectionName.([]string)[i] = getSectionName(strIndex, strTable)
 		}
 	}
 
 	if h, ok := elf_fs.Hdr.(*elf.Header32); ok {
-		Shentsize_ := h.Shentsize
-		Shnum_ := h.Shnum
-		ShdrTableSize := Shentsize_ * Shnum_
+		shdrTableSize := h.Shentsize * h.Shnum
 
-		elf_fs.ElfSections.Section = make([]elf.Section32, Shnum_)
-		elf_fs.ElfSections.SectionName = make([]string, Shnum_)
+		elf_fs.ElfSections.Section = make([]elf.Section32, h.Shnum)
+		elf_fs.ElfSections.SectionName = make([]string, h.Shnum)
 
-		sr := io.NewSectionReader(elf_fs.Fh, int64(h.Shoff), int64(ShdrTableSize))
+		sr := io.NewSectionReader(elf_fs.Fh, int64(h.Shoff), int64(shdrTableSize))
 		err := binary.Read(sr, elf_fs.FileHdr.Endianness, elf_fs.ElfSections.Section.([]elf.Section32))
-		checkerror(err)
+		checkError(err)
 
-		StrTable := make([]byte, elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size)
-		StrTableOff := elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Off
-		StrTableSize := elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size
-		StrTableEnd := StrTableOff + StrTableSize
+		strTable := make([]byte, elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size)
+		strTableOff := elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Off
+		strTableSize := elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size
+		StrTableEnd := strTableOff + strTableSize
 
-		StrTabSec := io.NewSectionReader(elf_fs.Fh, int64(StrTableOff), int64(StrTableEnd))
-		err = binary.Read(StrTabSec, elf_fs.FileHdr.Endianness, StrTable)
-		checkerror(err)
+		strTabSec := io.NewSectionReader(elf_fs.Fh, int64(strTableOff), int64(StrTableEnd))
+		err = binary.Read(strTabSec, elf_fs.FileHdr.Endianness, strTable)
+		checkError(err)
 
-		var SecStrEnd uint64
-		for i := 0; i < int(Shnum_); i++ {
-			SecStrStart := elf_fs.ElfSections.Section.([]elf.Section32)[i].Name
-			for SecStrEnd = uint64(SecStrStart); SecStrEnd < uint64(len(StrTable)); SecStrEnd++ {
-				if StrTable[SecStrEnd] == 0x0 {
-					break;
-				}
-			}
-
-			StrTabBuf.Write(StrTable[SecStrStart:SecStrEnd])
-			elf_fs.ElfSections.SectionName.([]string)[i] = StrTabBuf.String()
-			StrTabBuf.Reset()
+		for i := 0; i < int(h.Shnum); i++ {
+			strIndex := elf_fs.ElfSections.Section.([]elf.Section32)[i].Name
+			elf_fs.ElfSections.SectionName.([]string)[i] = getSectionName(strIndex, strTable)
 		}
 	}
 }
-func print_sections() {
+
+func getSectionName(strIndex uint32, sectionStrTab []byte) string {
+	end := strIndex
+	for end < uint32(len(sectionStrTab)) {
+		if sectionStrTab[end] == 0x0 {
+			break;
+		}
+		end++
+	}
+
+	var name bytes.Buffer
+	name.Write(sectionStrTab[strIndex:end])
+	return name.String()
+}
+
+func printSections(ElfSections ShdrTble, numSec uint16, secOff interface{}) {
+	
+	switch secOff.(type) {
+		case uint32:
+		fmt.Printf("%d Sections @ Offset 0x%x\n", numSec, secOff.(uint32))
+
+		case uint64:
+		fmt.Printf("%d Sections @ Offset 0x%x\n", numSec, secOff.(uint64))
+	}
+
+	if section, ok := ElfSections.Section.([]elf.Section32); ok {
+		for i := uint16(0); i < numSec; i++ {
+			fmt.Printf("------------------------------------------\n\n\n")
+			fmt.Printf("Section Number: %d\n", i)
+			fmt.Printf("Name: %s\n", ElfSections.SectionName.([]string)[i])
+			fmt.Printf("Type: %s\n", elf.SectionType(section[i].Type))
+			fmt.Printf("Flags: %s\n", elf.SectionFlag(section[i].Flags))
+			fmt.Printf("Address: 0x%x\n", section[i].Addr)
+			fmt.Printf("Offset: 0x%x\n", section[i].Off)
+			fmt.Printf("Size: 0x%x\n", section[i].Size)
+			fmt.Printf("Link: 0x%x\n", section[i].Link)
+			fmt.Printf("Info: 0x%x\n", section[i].Info)
+			fmt.Printf("Alignment: 0x%x\n", section[i].Addralign)
+			fmt.Printf("Entry Size: 0x%x\n", section[i].Entsize)
+		}
+	}
+
+	if section, ok := ElfSections.Section.([]elf.Section64); ok {
+		for i := uint16(0); i < numSec; i++ {
+			fmt.Printf("------------------------------------------\n\n\n")
+			fmt.Printf("Section Number: %d\n", i)
+			fmt.Printf("Name: %s\n", ElfSections.SectionName.([]string)[i])
+			fmt.Printf("Type: %s\n", elf.SectionType(section[i].Type))
+			fmt.Printf("Flags: %s\n", elf.SectionFlag(section[i].Flags))
+			fmt.Printf("Address: 0x%x\n", section[i].Addr)
+			fmt.Printf("Offset: 0x%x\n", section[i].Off)
+			fmt.Printf("Size: 0x%x\n", section[i].Size)
+			fmt.Printf("Link: 0x%x\n", section[i].Link)
+			fmt.Printf("Info: 0x%x\n", section[i].Info)
+			fmt.Printf("Alignment: 0x%x\n", section[i].Addralign)
+			fmt.Printf("Entry Size: 0x%x\n", section[i].Entsize)
+		}
+	}
 	return
 }
 
-func print_header(hdr interface{}) {
+func printHeader(hdr interface{}) {
         if h, ok := hdr.(*elf.Header64); ok{
                 fmt.Printf("-------------------------- Elf Header ------------------------\n")
                 fmt.Printf("Magic: % x\n", h.Ident)
@@ -221,7 +255,7 @@ func print_header(hdr interface{}) {
 }
 
 func main() {
-	var target elf_File;
+	var target ElfFile;
 
 	if len(os.Args) < 3{
 		usage()
@@ -231,11 +265,11 @@ func main() {
 
 	bin := os.Args[2]
 	target.Fh, target.Err = os.Open(bin)
-	checkerror(target.Err)
+	checkError(target.Err)
 
 	target.Fh.Read(target.Ident[:16])
 
-	if is_elf(target.Ident[:4]) == false {
+	if isElf(target.Ident[:4]) == false {
 		fmt.Println("This is not an Elf binary\n")
 		os.Exit(1)
 	}
@@ -252,26 +286,32 @@ func main() {
 
 	for i := 1; i < len(options) ; i++ {
 		switch {
-		case options[i] == 'h':
-			fmt.Println("h flag present")
-			optheader = true
-		case options[i] == 'S':
-			fmt.Println("S flag present")
-			optsections = true
-		default:
-			fmt.Println("Unrecognizable parameters");
-			os.Exit(ERROR)
+			case options[i] == 'h':
+				fmt.Println("h flag present")
+				optheader = true
+			case options[i] == 'S':
+				fmt.Println("S flag present")
+				optsections = true
+			default:
+				fmt.Println("Unrecognizable parameters");
+				os.Exit(ERROR)
 		}
 	}
 
 	if optheader {
-		print_header(target.Hdr)
+		printHeader(target.Hdr)
 	}
 
 	if optsections {
-		target.GetSections()
-		fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
-		fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section64)[1].Size)
+		target.getSections()
+		//fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
+		//fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section64)[1].Size)
+		switch target.FileHdr.Arch {
+			case elf.ELFCLASS32:
+			printSections(target.ElfSections, target.Hdr.(*elf.Header32).Shnum, target.Hdr.(*elf.Header32).Shoff)
+			case elf.ELFCLASS64:
+			printSections(target.ElfSections, target.Hdr.(*elf.Header64).Shnum, target.Hdr.(*elf.Header64).Shoff)
+		}
 	}
 }
 
@@ -279,12 +319,12 @@ func usage() {
 	fmt.Println("Usage information")
 }
 
-func checkerror(e error){
-	if e != nil{
-		panic(e)
+func checkError(checkError error){
+	if checkError != nil{
+		panic(checkError)
 	}
 }
 
-func is_elf(magic []byte) bool {
+func isElf(magic []byte) bool {
 	return !(magic[0] != '\x7f' || magic[1] != 'E' || magic [2] != 'L' || magic[3] != 'F')
 }
