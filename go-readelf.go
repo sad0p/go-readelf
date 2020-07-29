@@ -35,6 +35,11 @@ type ShdrTble struct{
 	SectionName interface{}
 }
 
+type SymTab struct{
+	Symbol interface{}
+	SymbolName interface{}
+}
+
 type ElfFile struct{
 	Fh *os.File
 	Ident [16]byte
