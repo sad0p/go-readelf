@@ -50,17 +50,6 @@ const (
 	ERROR   int = 1
 )
 
-func (elf_fs *ElfFile) Header(amb_elf_arch interface{}){
-	switch v := amb_elf_arch.(type) {
-		case *elf.Header32:
-			fmt.Printf("Elf32 detected: %v\n", v)
-		case *elf.Header64:
-			fmt.Println("Elf64 detected: %v\n", v)
-		default:
-			fmt.Println("Invalid Type detected: %v\n", v)
-	}
-}
-
 func (elf_fs *ElfFile) SetArch() {
 	switch elf.Class(elf_fs.Ident[elf.EI_CLASS]) {
 		case elf.ELFCLASS64:
