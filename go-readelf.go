@@ -35,11 +35,6 @@ type ShdrTble struct{
 	SectionName interface{}
 }
 
-type SymTab struct{
-	Symbols interface{}
-	SymName interface{}
-}
-
 type ElfFile struct{
 	Fh *os.File
 	Ident [16]byte
@@ -47,7 +42,6 @@ type ElfFile struct{
 	Hdr interface{}
 	Err error
 	ElfSections ShdrTble
-	ElfSymbols SymTab
 	Size int64
 }
 
@@ -55,6 +49,17 @@ const (
 	SUCCESS int = 0
 	ERROR   int = 1
 )
+
+func (elf_fs *ElfFile) Header(amb_elf_arch interface{}){
+	switch v := amb_elf_arch.(type) {
+		case *elf.Header32:
+			fmt.Printf("Elf32 detected: %v\n", v)
+		case *elf.Header64:
+			fmt.Println("Elf64 detected: %v\n", v)
+		default:
+			fmt.Println("Invalid Type detected: %v\n", v)
+	}
+}
 
 func (elf_fs *ElfFile) SetArch() {
 	switch elf.Class(elf_fs.Ident[elf.EI_CLASS]) {
@@ -280,35 +285,32 @@ func main() {
 	target.MapHeader()
 
 
+	var optheader, optsections bool
 	options := os.Args[1]
 	if options[0] != '-' {
 		usage()
 		os.Exit(ERROR)
 	}
 
-	var optHeader, optSections, optSymbols bool
 	for i := 1; i < len(options) ; i++ {
 		switch {
 			case options[i] == 'h':
 				fmt.Println("h flag present")
-				optHeader = true
+				optheader = true
 			case options[i] == 'S':
 				fmt.Println("S flag present")
-				optSections = true
-			case options[i] == 's':
-				optSymbols = true
-				fmt.Println("s flag present")
+				optsections = true
 			default:
 				fmt.Println("Unrecognizable parameters");
 				os.Exit(ERROR)
 		}
 	}
 
-	if optHeader {
+	if optheader {
 		printHeader(target.Hdr)
 	}
 
-	if optSections {
+	if optsections {
 		target.getSections()
 		//fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
 		//fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section64)[1].Size)
@@ -318,13 +320,6 @@ func main() {
 			case elf.ELFCLASS64:
 			printSections(target.ElfSections, target.Hdr.(*elf.Header64).Shnum, target.Hdr.(*elf.Header64).Shoff)
 		}
-	}
-
-	if optSymbols {
-		if optSections == false {
-			target.getSections()
-		}
-		target.getSymbols()
 	}
 }
 
