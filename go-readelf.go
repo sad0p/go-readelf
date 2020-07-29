@@ -35,6 +35,11 @@ type ShdrTble struct{
 	SectionName interface{}
 }
 
+type SymTab struct{
+	Symbols interface{}
+	SymName interface{}
+}
+
 type ElfFile struct{
 	Fh *os.File
 	Ident [16]byte
@@ -42,6 +47,7 @@ type ElfFile struct{
 	Hdr interface{}
 	Err error
 	ElfSections ShdrTble
+	ElfSymbols SymTab
 	Size int64
 }
 
@@ -140,6 +146,14 @@ func (elf_fs *ElfFile) getSections() {
 		for i := 0; i < int(h.Shnum); i++ {
 			strIndex := elf_fs.ElfSections.Section.([]elf.Section32)[i].Name
 			elf_fs.ElfSections.SectionName.([]string)[i] = getSectionName(strIndex, strTable)
+		}
+	}
+}
+func (elf_fs *ElfFile) getSymbols() {
+	var ndx int
+	for ndx = 0; ndx < len(elf_fs.ElfSections.SectionName.([]string)); ndx++ {
+		if elf_fs.ElfSections.SectionName.([]string)[ndx] == ".symtab" {
+			fmt.Println("Got .symtab")
 		}
 	}
 }
@@ -266,32 +280,35 @@ func main() {
 	target.MapHeader()
 
 
-	var optheader, optsections bool
 	options := os.Args[1]
 	if options[0] != '-' {
 		usage()
 		os.Exit(ERROR)
 	}
 
+	var optHeader, optSections, optSymbols bool
 	for i := 1; i < len(options) ; i++ {
 		switch {
 			case options[i] == 'h':
 				fmt.Println("h flag present")
-				optheader = true
+				optHeader = true
 			case options[i] == 'S':
 				fmt.Println("S flag present")
-				optsections = true
+				optSections = true
+			case options[i] == 's':
+				optSymbols = true
+				fmt.Println("s flag present")
 			default:
 				fmt.Println("Unrecognizable parameters");
 				os.Exit(ERROR)
 		}
 	}
 
-	if optheader {
+	if optHeader {
 		printHeader(target.Hdr)
 	}
 
-	if optsections {
+	if optSections {
 		target.getSections()
 		//fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
 		//fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section64)[1].Size)
@@ -301,6 +318,13 @@ func main() {
 			case elf.ELFCLASS64:
 			printSections(target.ElfSections, target.Hdr.(*elf.Header64).Shnum, target.Hdr.(*elf.Header64).Shoff)
 		}
+	}
+
+	if optSymbols {
+		if optSections == false {
+			target.getSections()
+		}
+		target.getSymbols()
 	}
 }
 
