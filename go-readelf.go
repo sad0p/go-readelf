@@ -290,7 +290,7 @@ func main() {
 	target.MapHeader()
 
 
-	var optheader, optsections bool
+	var optHeader, optSections, optSymbols bool
 	options := os.Args[1]
 	if options[0] != '-' {
 		usage()
@@ -301,30 +301,38 @@ func main() {
 		switch {
 			case options[i] == 'h':
 				fmt.Println("h flag present")
-				optheader = true
+				optHeader = true
 			case options[i] == 'S':
 				fmt.Println("S flag present")
-				optsections = true
+				optSections = true
+			case options[i] == 's':
+				optSymbols = true
+				fmt.Println("s flag present")
 			default:
 				fmt.Println("Unrecognizable parameters");
 				os.Exit(ERROR)
 		}
 	}
 
-	if optheader {
+	if optHeader {
 		printHeader(target.Hdr)
 	}
 
-	if optsections {
+	if optSections {
 		target.getSections()
-		//fmt.Printf("%s\n", target.ElfSections.SectionName.([]string)[1])
-		//fmt.Printf("%x\n", target.ElfSections.Section.([]elf.Section64)[1].Size)
 		switch target.FileHdr.Arch {
 			case elf.ELFCLASS32:
-			printSections(target.ElfSections, target.Hdr.(*elf.Header32).Shnum, target.Hdr.(*elf.Header32).Shoff)
+				printSections(target.ElfSections, target.Hdr.(*elf.Header32).Shnum, target.Hdr.(*elf.Header32).Shoff)
 			case elf.ELFCLASS64:
-			printSections(target.ElfSections, target.Hdr.(*elf.Header64).Shnum, target.Hdr.(*elf.Header64).Shoff)
+				printSections(target.ElfSections, target.Hdr.(*elf.Header64).Shnum, target.Hdr.(*elf.Header64).Shoff)
 		}
+	}
+
+	if optSymbols {
+		if optSections == false {
+			target.getSections()
+		}
+		target.getSymbols()
 	}
 }
 
