@@ -184,6 +184,7 @@ func getSectionName(strIndex uint32, sectionStrTab []byte) string {
 
 func printSections(ElfSections ShdrTble, numSec uint16, secOff interface{}) {
 	
+	fmt.Printf("------------------------------------------\n\n\n")
 	switch secOff.(type) {
 		case uint32:
 		fmt.Printf("%d Sections @ Offset 0x%x\n", numSec, secOff.(uint32))
@@ -194,7 +195,6 @@ func printSections(ElfSections ShdrTble, numSec uint16, secOff interface{}) {
 
 	if section, ok := ElfSections.Section.([]elf.Section32); ok {
 		for i := uint16(0); i < numSec; i++ {
-			fmt.Printf("------------------------------------------\n\n\n")
 			fmt.Printf("Section Number: %d\n", i)
 			fmt.Printf("Name: %s\n", ElfSections.SectionName.([]string)[i])
 			fmt.Printf("Type: %s\n", elf.SectionType(section[i].Type))
