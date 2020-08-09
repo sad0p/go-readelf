@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"debug/elf"
 	"os"
+	"unsafe"
 	)
 
 // Goals
@@ -47,6 +48,7 @@ type ElfFile struct{
 	Hdr interface{}
 	Err error
 	ElfSections ShdrTble
+	ElfSymbols SymTab
 	Size int64
 }
 
@@ -55,7 +57,7 @@ const (
 	ERROR   int = 1
 )
 
-func (elf_fs *ElfFile) Header(amb_elf_arch interface{}){
+func (elfFs *ElfFile) Header(amb_elf_arch interface{}){
 	switch v := amb_elf_arch.(type) {
 		case *elf.Header32:
 			fmt.Printf("Elf32 detected: %v\n", v)
@@ -66,39 +68,39 @@ func (elf_fs *ElfFile) Header(amb_elf_arch interface{}){
 	}
 }
 
-func (elf_fs *ElfFile) SetArch() {
-	switch elf.Class(elf_fs.Ident[elf.EI_CLASS]) {
+func (elfFs *ElfFile) SetArch() {
+	switch elf.Class(elfFs.Ident[elf.EI_CLASS]) {
 		case elf.ELFCLASS64:
-			elf_fs.Hdr = new(elf.Header64)
-			elf_fs.FileHdr.Arch = elf.ELFCLASS64
+			elfFs.Hdr = new(elf.Header64)
+			elfFs.FileHdr.Arch = elf.ELFCLASS64
 
 		case elf.ELFCLASS32:
-			elf_fs.Hdr = new(elf.Header32)
-			elf_fs.FileHdr.Arch = elf.ELFCLASS32
+			elfFs.Hdr = new(elf.Header32)
+			elfFs.FileHdr.Arch = elf.ELFCLASS32
 		default:
 			fmt.Println("Elf Arch Class Invalid !\n")
 			os.Exit(1)
 	}
 }
 
-func (elf_fs *ElfFile) MapHeader() {
+func (elfFs *ElfFile) MapHeader() {
 
-	switch elf.Data(elf_fs.Ident[elf.EI_DATA]) {
+	switch elf.Data(elfFs.Ident[elf.EI_DATA]) {
 		case elf.ELFDATA2LSB:
-			elf_fs.FileHdr.Endianness = binary.LittleEndian
+			elfFs.FileHdr.Endianness = binary.LittleEndian
 		case elf.ELFDATA2MSB:
-			elf_fs.FileHdr.Endianness = binary.BigEndian
+			elfFs.FileHdr.Endianness = binary.BigEndian
 		default:
 			fmt.Println("Possible Corruption, Endianness unknown\n")
 	}
 
-	elf_fs.Fh.Seek(0, io.SeekStart)
-	err := binary.Read(elf_fs.Fh, elf_fs.FileHdr.Endianness, elf_fs.Hdr)
+	elfFs.Fh.Seek(0, io.SeekStart)
+	err := binary.Read(elfFs.Fh, elfFs.FileHdr.Endianness, elfFs.Hdr)
 	checkError(err)
 }
 
 
-func (elf_fs *ElfFile) findSectionByName(name string) {
+func (elfFs *ElfFile) findSectionByName(name string) {
 	return
 }
 
@@ -108,78 +110,209 @@ func (elf_fs *ElfFile) findSectionByName(name string) {
 //Calculate the size of Section Header Table = Shnum * Shentsize
 
 
-func (elf_fs *ElfFile) getSections() {
+func (elfFs *ElfFile) getSections() {
 
-	if h, ok := elf_fs.Hdr.(*elf.Header64); ok {
+	if h, ok := elfFs.Hdr.(*elf.Header64); ok {
 		shdrTableSize := h.Shentsize * h.Shnum
 
-		elf_fs.ElfSections.Section = make([]elf.Section64, h.Shnum)
-		elf_fs.ElfSections.SectionName = make([]string, h.Shnum)
+		elfFs.ElfSections.Section = make([]elf.Section64, h.Shnum)
+		elfFs.ElfSections.SectionName = make([]string, h.Shnum)
 
-		sr := io.NewSectionReader(elf_fs.Fh, int64(h.Shoff), int64(shdrTableSize))
-		err := binary.Read(sr, elf_fs.FileHdr.Endianness, elf_fs.ElfSections.Section.([]elf.Section64))
+		sr := io.NewSectionReader(elfFs.Fh, int64(h.Shoff), int64(shdrTableSize))
+		err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.ElfSections.Section.([]elf.Section64))
 		checkError(err)
 
-		strTable := make([]byte, elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size)
-		strTableOff := elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Off
-		strTableSize := elf_fs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size
+		shstrtab := make([]byte, elfFs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size)
+		shstrtabOff := elfFs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Off
+		shstrtabSize := elfFs.ElfSections.Section.([]elf.Section64)[h.Shstrndx].Size
 
-		strTabSec := io.NewSectionReader(elf_fs.Fh, int64(strTableOff), int64(strTableSize) + int64(strTableOff))
-		err = binary.Read(strTabSec, elf_fs.FileHdr.Endianness, strTable)
+		shstrtabSec := io.NewSectionReader(elfFs.Fh, int64(shstrtabOff), int64(shstrtabSize) + int64(shstrtabOff))
+		err = binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, shstrtab)
 		checkError(err)
 
 		for i := 0; i < int(h.Shnum); i++ {
-			strIndex := elf_fs.ElfSections.Section.([]elf.Section64)[i].Name
-			elf_fs.ElfSections.SectionName.([]string)[i] = getSectionName(strIndex, strTable)
+			sIndex := elfFs.ElfSections.Section.([]elf.Section64)[i].Name
+			elfFs.ElfSections.SectionName.([]string)[i] = getSectionName(sIndex, shstrtab)
 		}
 	}
 
-	if h, ok := elf_fs.Hdr.(*elf.Header32); ok {
+	if h, ok := elfFs.Hdr.(*elf.Header32); ok {
 		shdrTableSize := h.Shentsize * h.Shnum
 
-		elf_fs.ElfSections.Section = make([]elf.Section32, h.Shnum)
-		elf_fs.ElfSections.SectionName = make([]string, h.Shnum)
+		elfFs.ElfSections.Section = make([]elf.Section32, h.Shnum)
+		elfFs.ElfSections.SectionName = make([]string, h.Shnum)
 
-		sr := io.NewSectionReader(elf_fs.Fh, int64(h.Shoff), int64(shdrTableSize))
-		err := binary.Read(sr, elf_fs.FileHdr.Endianness, elf_fs.ElfSections.Section.([]elf.Section32))
+		sr := io.NewSectionReader(elfFs.Fh, int64(h.Shoff), int64(shdrTableSize))
+		err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.ElfSections.Section.([]elf.Section32))
 		checkError(err)
 
-		strTable := make([]byte, elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size)
-		strTableOff := elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Off
-		strTableSize := elf_fs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size
-		StrTableEnd := strTableOff + strTableSize
+		shstrtab := make([]byte, elfFs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size)
+		shstrtabOff := elfFs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Off
+		shstrtabSize := elfFs.ElfSections.Section.([]elf.Section32)[h.Shstrndx].Size
+		shstrTableEnd := shstrtabOff + shstrtabSize
 
-		strTabSec := io.NewSectionReader(elf_fs.Fh, int64(strTableOff), int64(StrTableEnd))
-		err = binary.Read(strTabSec, elf_fs.FileHdr.Endianness, strTable)
+		shstrtabSec := io.NewSectionReader(elfFs.Fh, int64(shstrtabOff), int64(shstrTableEnd))
+		err = binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, shstrtab)
 		checkError(err)
 
 		for i := 0; i < int(h.Shnum); i++ {
-			strIndex := elf_fs.ElfSections.Section.([]elf.Section32)[i].Name
-			elf_fs.ElfSections.SectionName.([]string)[i] = getSectionName(strIndex, strTable)
+			sIndex := elfFs.ElfSections.Section.([]elf.Section32)[i].Name
+			elfFs.ElfSections.SectionName.([]string)[i] = getSectionName(sIndex, shstrtab)
 		}
 	}
 }
-func (elf_fs *ElfFile) getSymbols() {
-	var ndx int
-	for ndx = 0; ndx < len(elf_fs.ElfSections.SectionName.([]string)); ndx++ {
-		if elf_fs.ElfSections.SectionName.([]string)[ndx] == ".symtab" {
-			fmt.Println("Got .symtab")
-		}
+func (elfFs *ElfFile) getSymbols() {
+    
+	var dsymtabNdx uint32
+	if dsymtabNdx = getSectionNdx(".dynsym", elfFs); dsymtabNdx != 0 {
+		var  dynstrNdx uint32
+		dynstrNdx  = getSectionNdx(".dynstr", elfFs)
+		elfFs.loadSymbols(dsymtabNdx, dynstrNdx)
+
+		fmt.Printf("%d entries found in .dynsym\n", len(elfFs.ElfSymbols.SymbolName.([]string)))
+		printSymbols(elfFs)
+	} else {
+		fmt.Println("No Dynamic symbols found - .dynsym missing from target")
+	}
+
+	var symtabNdx uint32
+	var symstrNdx  uint32
+	if symtabNdx  = getSectionNdx(".symtab", elfFs); symtabNdx != 0 {
+		symstrNdx  = getSectionNdx(".strtab", elfFs)
+		elfFs.loadSymbols(symtabNdx, symstrNdx)
+
+		fmt.Printf("%d entries found in .symtab\n", len(elfFs.ElfSymbols.SymbolName.([]string)))
+		printSymbols(elfFs)
+	} else {
+		fmt.Println("Section .symtab mising -- Binary is stripped no exported symbols available !")
 	}
 }
 
-func getSectionName(strIndex uint32, sectionStrTab []byte) string {
-	end := strIndex
-	for end < uint32(len(sectionStrTab)) {
-		if sectionStrTab[end] == 0x0 {
+func (elfFs *ElfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32) {
+	switch elfFs.FileHdr.Arch {
+	
+	case elf.ELFCLASS32:
+		s := elfFs.ElfSections.Section.([]elf.Section32)[sectionNdx].Size
+		numSymbols := s / uint32(unsafe.Sizeof(elfFs.ElfSymbols.Symbol.(elf.Sym32)))
+		elfFs.ElfSymbols.Symbol = make([]elf.Sym32, numSymbols)
+
+		off := elfFs.ElfSections.Section.([]elf.Section32)[sectionNdx].Off
+		size := elfFs.ElfSections.Section.([]elf.Section32)[sectionNdx].Size
+
+			sr := io.NewSectionReader(elfFs.Fh, int64(off), int64(size))
+			err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.ElfSymbols.Symbol.([]elf.Sym32))
+			checkError(err)
+			
+
+			strtab := make([]byte, elfFs.ElfSections.Section.([]elf.Section32)[symstrNdx].Size)
+			elfFs.ElfSymbols.SymbolName = make([]string, numSymbols)
+
+			strtabOff := elfFs.ElfSections.Section.([]elf.Section32)[symstrNdx].Off
+			strtabSize := elfFs.ElfSections.Section.([]elf.Section32)[symstrNdx].Size
+			shstrtabSec := io.NewSectionReader(elfFs.Fh, int64(strtabOff), int64(strtabSize))
+
+			err = binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, strtab)
+			checkError(err)
+			
+			for i := uint32(0); i < numSymbols; i++ {
+				symIndex := elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Name
+				elfFs.ElfSymbols.SymbolName.([]string)[i] = getSymbolName(symIndex, strtab)
+			}
+	
+	case elf.ELFCLASS64:
+		s := elfFs.ElfSections.Section.([]elf.Section64)[sectionNdx].Size
+		numSymbols := s / uint64(unsafe.Sizeof(elfFs.ElfSymbols.Symbol.(elf.Sym64)))
+		elfFs.ElfSymbols.Symbol = make([]elf.Sym64, numSymbols)
+
+		off := elfFs.ElfSections.Section.([]elf.Section64)[sectionNdx].Off
+		size := elfFs.ElfSections.Section.([]elf.Section64)[sectionNdx].Size
+
+		sr := io.NewSectionReader(elfFs.Fh, int64(off), int64(size))
+		err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.ElfSymbols.Symbol.([]elf.Sym64))
+		checkError(err)
+			
+
+		strtab := make([]byte, elfFs.ElfSections.Section.([]elf.Section64)[symstrNdx].Size)
+		elfFs.ElfSymbols.SymbolName = make([]string, numSymbols)
+
+		strtabOff := elfFs.ElfSections.Section.([]elf.Section64)[symstrNdx].Off
+		strtabSize := elfFs.ElfSections.Section.([]elf.Section64)[symstrNdx].Size
+		shstrtabSec := io.NewSectionReader(elfFs.Fh, int64(strtabOff), int64(strtabSize))
+
+		err = binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, strtab)
+		checkError(err)
+			
+		for i := uint64(0); i < numSymbols; i++ {
+			symIndex := elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Name
+			elfFs.ElfSymbols.SymbolName.([]string)[i] = getSymbolName(symIndex, strtab)
+		}		
+	}
+}
+
+func getSymbolName(symIndex uint32, sectionStrtab []byte) string {
+	return getSectionName(symIndex, sectionStrtab)
+}
+
+func getSectionNdx(name string, elfFs *ElfFile) uint32 {
+	var ndx uint32
+	for ndx = 0; ndx < uint32(len(elfFs.ElfSections.SectionName.([]string))); ndx++ {
+		if elfFs.ElfSections.SectionName.([]string)[ndx] == name {
+				return ndx
+		}
+	}
+	return uint32(0)
+}
+
+func getSectionName(sIndex uint32, sectionShstrTab []byte) string {
+	end := sIndex
+	for end < uint32(len(sectionShstrTab)) {
+		if sectionShstrTab[end] == 0x0 {
 			break;
 		}
 		end++
 	}
 
 	var name bytes.Buffer
-	name.Write(sectionStrTab[strIndex:end])
+	name.Write(sectionShstrTab[sIndex:end])
 	return name.String()
+}
+
+func printSymbols(elfFs *ElfFile) {
+
+	//ndx := getSectionNdx(".dynsym", elfFs)
+	nsym := len(elfFs.ElfSymbols.SymbolName.([]string))
+	//fmt.Printf("%d Symbol entries found in .dynsym\n\n", nsym)
+
+	switch elfFs.FileHdr.Arch{
+		case elf.ELFCLASS32:
+			for i := 0; i < nsym; i++ {
+				fmt.Printf("Entry: #%d\n", i)
+				fmt.Printf("Value: 0x%x\n",elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Value)
+				fmt.Printf("Size: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Size)
+				fmt.Printf("Type: %s\n", elf.ST_TYPE(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
+				fmt.Printf("Bind: %s\n", elf.ST_BIND(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
+			//	fmt.Printf("Info: %s\n", elf.ST_INFO(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
+				fmt.Printf("Visibility: %s\n", elf.ST_VISIBILITY(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Other))
+				fmt.Printf("Section: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Shndx)
+				fmt.Printf("Name: %s\n", elfFs.ElfSymbols.SymbolName.([]string)[i])
+				fmt.Printf("\n\n\n\n")
+			}
+
+		case elf.ELFCLASS64:
+			for i := 0; i < nsym; i++ {
+				fmt.Printf("Entry: #%d\n", i)
+				fmt.Printf("Value: 0x%x\n",elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Value)
+				fmt.Printf("Size: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Size)
+				fmt.Printf("Type: %s\n", elf.ST_TYPE(elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Info))
+				fmt.Printf("Bind: %s\n", elf.ST_BIND(elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Info))
+			//	fmt.Printf("Info: %s\n", elf.ST_INFO(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
+				fmt.Printf("Visibility: %s\n", elf.ST_VISIBILITY(elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Other))
+				fmt.Printf("Section: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Shndx)
+				fmt.Printf("Name: %s\n", elfFs.ElfSymbols.SymbolName.([]string)[i])
+				fmt.Printf("\n\n\n\n")
+			}
+	}
+
 }
 
 func printSections(ElfSections ShdrTble, numSec uint16, secOff interface{}) {
@@ -268,13 +401,14 @@ func printHeader(hdr interface{}) {
 }
 
 func main() {
-	var target ElfFile;
 
 	if len(os.Args) < 3{
 		usage()
 		os.Exit(ERROR)
 
 	}
+
+	var target ElfFile;
 
 	bin := os.Args[2]
 	target.Fh, target.Err = os.Open(bin)
@@ -290,24 +424,21 @@ func main() {
 	target.MapHeader()
 
 
-	var optHeader, optSections, optSymbols bool
 	options := os.Args[1]
 	if options[0] != '-' {
 		usage()
 		os.Exit(ERROR)
 	}
 
+	var optHeader, optSections, optSymbols bool
 	for i := 1; i < len(options) ; i++ {
 		switch {
 			case options[i] == 'h':
-				fmt.Println("h flag present")
 				optHeader = true
 			case options[i] == 'S':
-				fmt.Println("S flag present")
 				optSections = true
 			case options[i] == 's':
 				optSymbols = true
-				fmt.Println("s flag present")
 			default:
 				fmt.Println("Unrecognizable parameters");
 				os.Exit(ERROR)
@@ -333,6 +464,7 @@ func main() {
 			target.getSections()
 		}
 		target.getSymbols()
+		//printSymbols(&target)
 	}
 }
 
