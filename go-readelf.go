@@ -277,6 +277,21 @@ func getSectionName(sIndex uint32, sectionShstrTab []byte) string {
 	return name.String()
 }
 
+func (elfFs *ElfFile) getRelocations() {
+
+
+	if s, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
+		for sNdx := 0; sNdx < len(s); sNdx++ {
+			switch elf.SectionType(s[sNdx].Type) {
+				case elf.SHT_REL:
+					fmt.Println("Got a rel")
+			
+			}
+		}
+	}
+}
+
+
 func printSymbols(elfFs *ElfFile) {
 
 	//ndx := getSectionNdx(".dynsym", elfFs)
@@ -430,7 +445,7 @@ func main() {
 		os.Exit(ERROR)
 	}
 
-	var optHeader, optSections, optSymbols bool
+	var optHeader, optSections, optSymbols, optRelocations bool
 	for i := 1; i < len(options) ; i++ {
 		switch {
 			case options[i] == 'h':
@@ -439,6 +454,8 @@ func main() {
 				optSections = true
 			case options[i] == 's':
 				optSymbols = true
+			case options[i] == 'r':
+				optRelocations = true
 			default:
 				fmt.Println("Unrecognizable parameters");
 				os.Exit(ERROR)
@@ -464,7 +481,13 @@ func main() {
 			target.getSections()
 		}
 		target.getSymbols()
-		//printSymbols(&target)
+	}
+
+	if optRelocations {
+		if optSections == false {
+			target.getSections()
+		}
+		target.getRelocations()
 	}
 }
 
