@@ -49,6 +49,7 @@ type ElfFile struct{
 	Err error
 	ElfSections ShdrTble
 	ElfSymbols SymTab
+	Rels map[uint32]interface{}
 	Size int64
 }
 
@@ -277,20 +278,85 @@ func getSectionName(sIndex uint32, sectionShstrTab []byte) string {
 	return name.String()
 }
 
-func (elfFs *ElfFile) getRelocations() {
+func getSectionByType(t elf.SectionType, elfFs *ElfFile) []uint32 {
 
+	indexList := make([]uint32, len(elfFs.ElfSections.SectionName.([]string)))
+	lNdx := 0
 
 	if s, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
-		for sNdx := 0; sNdx < len(s); sNdx++ {
+		for sNdx := uint32(0); sNdx < uint32(len(s)); sNdx++{
+			if t == elf.SectionType(s[sNdx].Type) {
+				indexList[lNdx] = sNdx
+				lNdx++
+			}
+		}
+	}
+
+	if s, ok := elfFs.ElfSections.Section.([]elf.Section64); ok {
+		for sNdx := uint32(0); sNdx < uint32(len(s)); sNdx++{
+			if t == elf.SectionType(s[sNdx].Type) {
+				indexList[lNdx] = sNdx
+				lNdx++
+			}
+		} 
+	}
+	fmt.Println(indexList)
+	return indexList
+}
+
+func (elfFs *ElfFile) getRelocations() {
+
+	elfFs.Rels = make(map[uint32]interface{})
+	if s, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
+		for sNdx := uint32(0); sNdx < uint32(len(s)); sNdx++ {
 			switch elf.SectionType(s[sNdx].Type) {
 				case elf.SHT_REL:
-					fmt.Println("Got a rel")
-			
+					var rel elf.Rel32
+					sr := io.NewSectionReader(elfFs.Fh, int64(s[sNdx].Off), int64(s[sNdx].Size))
+					numRels := s[sNdx].Size / uint32(unsafe.Sizeof(rel))
+					elfFs.Rels[sNdx] = make([]elf.Rel32, numRels)  
+					err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.Rels[sNdx])
+					checkError(err)
+	
+				case elf.SHT_RELA:
+					var rel elf.Rela32
+					sr := io.NewSectionReader(elfFs.Fh, int64(s[sNdx].Off), int64(s[sNdx].Size))
+					numRels := s[sNdx].Size / uint32(unsafe.Sizeof(rel))
+					elfFs.Rels[sNdx] = make([]elf.Rela32, numRels)  
+					err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.Rels[sNdx])
+					checkError(err)
+
+			}
+		}
+	}
+
+	if s, ok := elfFs.ElfSections.Section.([]elf.Section64); ok {
+		for sNdx := uint32(0); sNdx < uint32(len(s)); sNdx++ {
+			switch elf.SectionType(s[sNdx].Type) {
+				case elf.SHT_REL:
+					var rel elf.Rel64
+					sr := io.NewSectionReader(elfFs.Fh, int64(s[sNdx].Off), int64(s[sNdx].Size))
+					numRels := s[sNdx].Size / uint64(unsafe.Sizeof(rel))
+					elfFs.Rels[sNdx] = make([]elf.Rel64, numRels)  
+					err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.Rels[sNdx])
+					checkError(err)
+		
+				case elf.SHT_RELA:
+					var rel elf.Rela64
+					sr := io.NewSectionReader(elfFs.Fh, int64(s[sNdx].Off), int64(s[sNdx].Size))
+					numRels := s[sNdx].Size / uint64(unsafe.Sizeof(rel))
+					elfFs.Rels[sNdx] = make([]elf.Rela64, numRels)  
+					err := binary.Read(sr, elfFs.FileHdr.Endianness, elfFs.Rels[sNdx])
+					checkError(err)
+	
 			}
 		}
 	}
 }
 
+func printRelocations(elfFs *ElfFile) {
+	getSectionByType(elf.SHT_RELA, elfFs)
+}
 
 func printSymbols(elfFs *ElfFile) {
 
@@ -488,6 +554,8 @@ func main() {
 			target.getSections()
 		}
 		target.getRelocations()
+		printRelocations(&target)
+
 	}
 }
 
