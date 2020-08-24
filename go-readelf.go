@@ -22,63 +22,49 @@ import (
 // [9] Create functionality to print shared library dependencies
 // [10] Create functionality to locate a specific symbol
 
-type ElfBiner interface {
-	Header(amb_elf_arch interface{})
-}
-
-type EnumIdent struct {
+type enumIdent struct {
 	Endianness binary.ByteOrder
 	Arch       elf.Class
 	Machine    elf.Machine
 }
 
-type ShdrTble struct {
+type shdrTble struct {
 	Section     interface{}
 	SectionName []string
 }
 
-type Symtab struct {
+type symtab struct {
 	Symbol     interface{}
 	SymbolName []string
 }
 
-type ElfFile struct {
+type elfFile struct {
 	Fh          *os.File
 	Ident       [16]byte
-	FileHdr     EnumIdent
+	FileHdr     enumIdent
 	Hdr         interface{}
-	Err         error
-	ElfSections ShdrTble
-	ElfSymbols  Symtab
-	Rels        map[uint32]interface{}
+	err         error
+	ElfSections shdrTble
+	ElfSymbols  symtab
 	Size        int64
 
 	//      XSections map[uint32]interface{}
+
 	Symbols        map[uint32]interface{}
 	SymbolsName    map[uint32]string
 	DynSymbols     map[uint32]interface{}
 	DynSymbolsName map[uint32]string
+	Rels           map[uint32]interface{} // relocation entries are mapped to section index
+
 }
 
 const (
-	SUCCESS int = 0
-	ERROR   int = 1
-	DYN_SYM int = 0xa
-	SYM     int = 0xb
+	f      int = 1
+	dynSym int = 0xa
+	sym    int = 0xb
 )
 
-func (elfFs *ElfFile) Header(amb_elf_arch interface{}) {
-	switch v := amb_elf_arch.(type) {
-	case *elf.Header32:
-		fmt.Printf("Elf32 detected: %v\n", v)
-	case *elf.Header64:
-		fmt.Println("Elf64 detected: %v\n", v)
-	default:
-		fmt.Println("Invalid Type detected: %v\n", v)
-	}
-}
-
-func (elfFs *ElfFile) SetArch() {
+func (elfFs *elfFile) setArch() {
 	switch elf.Class(elfFs.Ident[elf.EI_CLASS]) {
 	case elf.ELFCLASS64:
 		elfFs.Hdr = new(elf.Header64)
@@ -88,12 +74,12 @@ func (elfFs *ElfFile) SetArch() {
 		elfFs.Hdr = new(elf.Header32)
 		elfFs.FileHdr.Arch = elf.ELFCLASS32
 	default:
-		fmt.Println("Elf Arch Class Invalid !\n")
-		os.Exit(ERROR)
+		fmt.Println("Elf Arch Class Invalid !")
+		os.Exit(f)
 	}
 }
 
-func (elfFs *ElfFile) MapHeader() {
+func (elfFs *elfFile) mapHeader() {
 
 	switch elf.Data(elfFs.Ident[elf.EI_DATA]) {
 	case elf.ELFDATA2LSB:
@@ -101,7 +87,7 @@ func (elfFs *ElfFile) MapHeader() {
 	case elf.ELFDATA2MSB:
 		elfFs.FileHdr.Endianness = binary.BigEndian
 	default:
-		fmt.Println("Possible Corruption, Endianness unknown\n")
+		fmt.Println("Possible Corruption, Endianness unknown")
 	}
 
 	elfFs.Fh.Seek(0, io.SeekStart)
@@ -116,7 +102,7 @@ func (elfFs *ElfFile) MapHeader() {
 	}
 }
 
-func (elfFs *ElfFile) findSectionByName(name string) {
+func (elfFs *elfFile) findSectionByName(name string) {
 	return
 }
 
@@ -125,7 +111,7 @@ func (elfFs *ElfFile) findSectionByName(name string) {
 //Size per entry in Section Header Table = Shentsize
 //Calculate the size of Section Header Table = Shnum * Shentsize
 
-func (elfFs *ElfFile) getSections() {
+func (elfFs *elfFile) getSections() {
 
 	if h, ok := elfFs.Hdr.(*elf.Header64); ok {
 		shdrTableSize := h.Shentsize * h.Shnum
@@ -177,13 +163,13 @@ func (elfFs *ElfFile) getSections() {
 	}
 }
 
-func (elfFs *ElfFile) getSymbols() {
+func (elfFs *elfFile) getSymbols() {
 
 	var dsymtabNdx uint32
 	if dsymtabNdx = getSectionNdx(".dynsym", elfFs); dsymtabNdx != 0 {
 		var dynstrNdx uint32
 		dynstrNdx = getSectionNdx(".dynstr", elfFs)
-		elfFs.loadSymbols(dsymtabNdx, dynstrNdx, DYN_SYM)
+		elfFs.loadSymbols(dsymtabNdx, dynstrNdx, dynSym)
 
 		fmt.Printf("%d entries found in .dynsym\n", len(elfFs.DynSymbols))
 		printSymbols(elfFs)
@@ -195,8 +181,7 @@ func (elfFs *ElfFile) getSymbols() {
 	var symstrNdx uint32
 	if symtabNdx = getSectionNdx(".symtab", elfFs); symtabNdx != 0 {
 		symstrNdx = getSectionNdx(".strtab", elfFs)
-		elfFs.loadSymbols(symtabNdx, symstrNdx, SYM)
-
+		elfFs.loadSymbols(symtabNdx, symstrNdx, sym)
 		fmt.Printf("%d entries found in .symtab\n", len(elfFs.Symbols))
 		printSymbols(elfFs)
 	} else {
@@ -204,7 +189,7 @@ func (elfFs *ElfFile) getSymbols() {
 	}
 }
 
-func (elfFs *ElfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType int) {
+func (elfFs *elfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType int) {
 	switch elfFs.FileHdr.Arch {
 	case elf.ELFCLASS32:
 		var sym32 elf.Sym32
@@ -224,7 +209,7 @@ func (elfFs *ElfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 		err := binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, strtab)
 		checkError(err)
 
-		if symType == SYM {
+		if symType == sym {
 			elfFs.Symbols = make(map[uint32]interface{})
 			elfFs.SymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -239,7 +224,7 @@ func (elfFs *ElfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 			}
 		}
 
-		if symType == DYN_SYM {
+		if symType == dynSym {
 			elfFs.DynSymbols = make(map[uint32]interface{})
 			elfFs.DynSymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -272,7 +257,7 @@ func (elfFs *ElfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 		err := binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, strtab)
 		checkError(err)
 
-		if symType == SYM {
+		if symType == sym {
 			elfFs.Symbols = make(map[uint32]interface{})
 			elfFs.SymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -287,7 +272,7 @@ func (elfFs *ElfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 			}
 		}
 
-		if symType == DYN_SYM {
+		if symType == dynSym {
 			elfFs.DynSymbols = make(map[uint32]interface{})
 			elfFs.DynSymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -308,7 +293,7 @@ func getSymbolName(symIndex uint32, sectionStrtab []byte) string {
 	return getSectionName(symIndex, sectionStrtab)
 }
 
-func getSectionNdx(name string, elfFs *ElfFile) uint32 {
+func getSectionNdx(name string, elfFs *elfFile) uint32 {
 	var ndx uint32
 	for ndx = 0; ndx < uint32(len(elfFs.ElfSections.SectionName)); ndx++ {
 		if elfFs.ElfSections.SectionName[ndx] == name {
@@ -332,7 +317,7 @@ func getSectionName(sIndex uint32, sectionShstrTab []byte) string {
 	return name.String()
 }
 
-func getSectionByType(t elf.SectionType, elfFs *ElfFile) []uint32 {
+func getSectionByType(t elf.SectionType, elfFs *elfFile) []uint32 {
 
 	var indexList []uint32
 
@@ -355,7 +340,7 @@ func getSectionByType(t elf.SectionType, elfFs *ElfFile) []uint32 {
 	return indexList
 }
 
-func (elfFs *ElfFile) getRelocations() {
+func (elfFs *elfFile) getRelocations() {
 
 	elfFs.Rels = make(map[uint32]interface{})
 	if s, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
@@ -387,7 +372,6 @@ func (elfFs *ElfFile) getRelocations() {
 			case elf.SHT_REL:
 				var rel elf.Rel64
 				n := int64(s[sNdx].Off) + int64(s[sNdx].Size)
-
 				sr := io.NewSectionReader(elfFs.Fh, int64(s[sNdx].Off), n)
 				numRels := s[sNdx].Size / uint64(unsafe.Sizeof(rel))
 				elfFs.Rels[sNdx] = make([]elf.Rel64, numRels)
@@ -435,7 +419,7 @@ func resolveRelocType(rType uint32, mType elf.Machine) string {
 	}
 }
 
-func printRelocations(elfFs *ElfFile) {
+func printRelocations(elfFs *elfFile) {
 	if _, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
 		for k, v := range elfFs.Rels {
 			sName := elfFs.ElfSections.SectionName[k]
@@ -443,14 +427,68 @@ func printRelocations(elfFs *ElfFile) {
 			case []elf.Rel32:
 				l := len(r)
 				fmt.Printf("\nSection %s has %d relocation entries\n\n", sName, l)
+				fmt.Println("Offset\t\t\tInfo\t\t\t\tType\t\t\tSym.Value\t\t\tSym.Name")
+
 				for rNdx := 0; rNdx < l; rNdx++ {
-					fmt.Printf("Offset: 0x%x\n", r[rNdx].Off)
+					o := r[rNdx].Off
+					t := elf.R_TYPE32(r[rNdx].Info)
+					s := elf.R_SYM32(r[rNdx].Info)
+					i := elf.R_INFO(s, t)
+
+					relName := resolveRelocType(t, elfFs.FileHdr.Machine)
+
+					var symName string
+					var symValue uint32
+					var symbol interface{}
+
+					secNdx := elfFs.ElfSections.Section.([]elf.Section32)[k].Link
+					switch elfFs.ElfSections.SectionName[secNdx] {
+					case ".dynsym":
+						symbol = elfFs.DynSymbols[s]
+						symName = elfFs.DynSymbolsName[symbol.(*elf.Sym32).Name]
+					case ".symtab":
+						symbol = elfFs.Symbols[s]
+						symName = elfFs.SymbolsName[symbol.(*elf.Sym32).Name]
+					default:
+						fmt.Printf("f when locating symbol tables in printRelocations()")
+						os.Exit(f)
+					}
+					symValue = symbol.(*elf.Sym32).Value
+					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s\n", o, i, relName, symValue, symName)
 				}
 			case []elf.Rela32:
 				l := len(r)
 				fmt.Printf("\nSection %s has %d relocation entries\n\n", sName, l)
 				for rNdx := 0; rNdx < l; rNdx++ {
-					fmt.Printf("Offset: 0x%x\t", r[rNdx].Off)
+					o := r[rNdx].Off
+					a := r[rNdx].Addend
+					t := elf.R_TYPE32(r[rNdx].Info)
+					s := elf.R_SYM32(r[rNdx].Info)
+					i := elf.R_INFO(s, t)
+
+					relName := resolveRelocType(t, elfFs.FileHdr.Machine)
+
+					var symName string
+					var symValue uint32
+					var symbol interface{}
+
+					secNdx := elfFs.ElfSections.Section.([]elf.Section32)[k].Link
+					switch elfFs.ElfSections.SectionName[secNdx] {
+					case ".dynsym":
+						symbol = elfFs.DynSymbols[s]
+						symName = elfFs.DynSymbolsName[symbol.(*elf.Sym32).Name]
+					case ".symtab":
+						symbol = elfFs.Symbols[s]
+						symName = elfFs.SymbolsName[symbol.(*elf.Sym32).Name]
+					default:
+						fmt.Printf("f when locating symbol tables in printRelocations()")
+						os.Exit(f)
+					}
+					symValue = symbol.(*elf.Sym32).Value
+					if s != uint32(elf.SHN_UNDEF) {
+						symName += " + "
+					}
+					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s%d\n", o, i, relName, symValue, symName, a)
 				}
 			}
 		}
@@ -463,15 +501,39 @@ func printRelocations(elfFs *ElfFile) {
 			case []elf.Rel64:
 				l := len(r)
 				fmt.Printf("\nSection %s has %d relocation entries\n\n", sName, l)
-				fmt.Println("Offset\t\t\tInfo\t\t\t\tType\t\t\tSym.Value\t\t\tSym.Name\n")
+				fmt.Println("Offset\t\t\tInfo\t\t\t\tType\t\t\tSym.Value\t\t\tSym.Name")
 
 				for rNdx := 0; rNdx < l; rNdx++ {
+					o := r[rNdx].Off
+					t := elf.R_TYPE64(r[rNdx].Info)
+					s := elf.R_SYM64(r[rNdx].Info)
+					i := elf.R_INFO(s, t)
 
+					relName := resolveRelocType(t, elfFs.FileHdr.Machine)
+
+					var symName string
+					var symValue uint64
+					var symbol interface{}
+
+					secNdx := elfFs.ElfSections.Section.([]elf.Section64)[k].Link
+					switch elfFs.ElfSections.SectionName[secNdx] {
+					case ".dynsym":
+						symbol = elfFs.DynSymbols[s]
+						symName = elfFs.DynSymbolsName[symbol.(*elf.Sym64).Name]
+					case ".symtab":
+						symbol = elfFs.Symbols[s]
+						symName = elfFs.SymbolsName[symbol.(*elf.Sym64).Name]
+					default:
+						fmt.Printf("f when locating symbol tables in printRelocations()")
+						os.Exit(f)
+					}
+					symValue = symbol.(*elf.Sym64).Value
+					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s\n", o, i, relName, symValue, symName)
 				}
 			case []elf.Rela64:
 				l := len(r)
 				fmt.Printf("\nSection %s has %d relocation entries\n\n", sName, l)
-				fmt.Println("Offset\t\t\tInfo\t\t\t\tType\t\t\tSym.Value\t\t\tSym.Name + Addend\n")
+				fmt.Println("Offset\t\t\tInfo\t\t\t\tType\t\t\tSym.Value\t\t\tSym.Name + Addend")
 
 				for rNdx := 0; rNdx < l; rNdx++ {
 					o := r[rNdx].Off
@@ -496,58 +558,94 @@ func printRelocations(elfFs *ElfFile) {
 						symName = elfFs.SymbolsName[symbol.(*elf.Sym64).Name]
 					default:
 						fmt.Printf("Error when locating symbol tables in printRelocations()")
-						os.Exit(ERROR)
+						os.Exit(f)
 					}
 					symValue = symbol.(*elf.Sym64).Value
 					if s != uint32(elf.SHN_UNDEF) {
 						symName += " + "
 					}
-					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s\t%d\n", o, i, relName, symValue, symName, a)
+					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s%d\n", o, i, relName, symValue, symName, a)
 				}
 			}
 		}
 	}
 }
 
-func printSymbols(elfFs *ElfFile) {
+func printSymbols(elfFs *elfFile) {
+	var symPresent, dsymPresent bool
+	var ndsym, nsym int
 
-	//ndx := getSectionNdx(".dynsym", elfFs)
-	nsym := len(elfFs.ElfSymbols.SymbolName)
-	//fmt.Printf("%d Symbol entries found in .dynsym\n\n", nsym)
+	if ndsym = len(elfFs.DynSymbols); ndsym > 0 {
+		dsymPresent = true
+	}
+	if nsym = len(elfFs.Symbols); nsym > 0 {
+		symPresent = true
+	}
 
 	switch elfFs.FileHdr.Arch {
 	case elf.ELFCLASS32:
-		for i := 0; i < nsym; i++ {
-			fmt.Printf("Entry: #%d\n", i)
-			fmt.Printf("Value: 0x%x\n", elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Value)
-			fmt.Printf("Size: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Size)
-			fmt.Printf("Type: %s\n", elf.ST_TYPE(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
-			fmt.Printf("Bind: %s\n", elf.ST_BIND(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
-			//      fmt.Printf("Info: %s\n", elf.ST_INFO(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
-			fmt.Printf("Visibility: %s\n", elf.ST_VISIBILITY(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Other))
-			fmt.Printf("Section: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Shndx)
-			fmt.Printf("Name: %s\n", elfFs.ElfSymbols.SymbolName[i])
-			fmt.Printf("\n\n\n\n")
+		fmt.Printf("  Num:\tValue\t\tSize \tType\t\tBind\t\tVis\t\tNdx\t\tName\n")
+		if dsymPresent {
+			for sNdx := uint32(0); sNdx < uint32(ndsym); sNdx++ {
+				sym := elfFs.DynSymbols[sNdx]
+				v := sym.(*elf.Sym32).Value
+				s := sym.(*elf.Sym32).Size
+				t := elf.ST_TYPE(sym.(*elf.Sym32).Info)
+				b := elf.ST_BIND(sym.(*elf.Sym32).Info)
+				vis := elf.ST_VISIBILITY(sym.(*elf.Sym32).Info)
+				sec := sym.(*elf.Sym32).Shndx
+				nm := elfFs.DynSymbolsName[sym.(*elf.Sym32).Name]
+				fmt.Printf("  %-5d %08x\t%d\t%s\t%s\t%s\t%d\t%s\n", sNdx, v, s, t, b, vis, sec, nm)
+			}
 		}
 
+		if symPresent {
+			for sNdx := uint32(0); sNdx < uint32(nsym); sNdx++ {
+				sym := elfFs.Symbols[sNdx]
+				v := sym.(*elf.Sym32).Value
+				s := sym.(*elf.Sym32).Size
+				t := elf.ST_TYPE(sym.(*elf.Sym32).Info)
+				b := elf.ST_BIND(sym.(*elf.Sym32).Info)
+				vis := elf.ST_VISIBILITY(sym.(*elf.Sym32).Info)
+				sec := sym.(*elf.Sym32).Shndx
+				nm := elfFs.SymbolsName[sym.(*elf.Sym32).Name]
+				fmt.Printf("  %-5d %08x\t%d\t%s\t%s\t%s\t%d\t%s\n", sNdx, v, s, t, b, vis, sec, nm)
+			}
+		}
 	case elf.ELFCLASS64:
-		for i := 0; i < nsym; i++ {
-			fmt.Printf("Entry: #%d\n", i)
-			fmt.Printf("Value: 0x%x\n", elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Value)
-			fmt.Printf("Size: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Size)
-			fmt.Printf("Type: %s\n", elf.ST_TYPE(elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Info))
-			fmt.Printf("Bind: %s\n", elf.ST_BIND(elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Info))
-			//      fmt.Printf("Info: %s\n", elf.ST_INFO(elfFs.ElfSymbols.Symbol.([]elf.Sym32)[i].Info))
-			fmt.Printf("Visibility: %s\n", elf.ST_VISIBILITY(elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Other))
-			fmt.Printf("Section: %d\n", elfFs.ElfSymbols.Symbol.([]elf.Sym64)[i].Shndx)
-			fmt.Printf("Name: %s\n", elfFs.ElfSymbols.SymbolName[i])
-			fmt.Printf("\n\n\n\n")
+		fmt.Printf("  Num:\tValue\t\tSize \tType\t\tBind\t\tVis\t\tNdx\t\tName\n")
+		if dsymPresent {
+			for sNdx := uint32(0); sNdx < uint32(ndsym); sNdx++ {
+				sym := elfFs.DynSymbols[sNdx]
+				v := sym.(*elf.Sym64).Value
+				s := sym.(*elf.Sym64).Size
+				t := elf.ST_TYPE(sym.(*elf.Sym64).Info)
+				b := elf.ST_BIND(sym.(*elf.Sym64).Info)
+				vis := elf.ST_VISIBILITY(sym.(*elf.Sym64).Info)
+				sec := sym.(*elf.Sym64).Shndx
+				nm := elfFs.DynSymbolsName[sym.(*elf.Sym64).Name]
+				fmt.Printf("  %-5d %08x\t%d\t%s\t%s\t%s\t%d\t%s\n", sNdx, v, s, t, b, vis, sec, nm)
+			}
+		}
+
+		if symPresent {
+			for sNdx := uint32(0); sNdx < uint32(nsym); sNdx++ {
+				sym := elfFs.Symbols[sNdx]
+				v := sym.(*elf.Sym64).Value
+				s := sym.(*elf.Sym64).Size
+				t := elf.ST_TYPE(sym.(*elf.Sym64).Info)
+				b := elf.ST_BIND(sym.(*elf.Sym64).Info)
+				vis := elf.ST_VISIBILITY(sym.(*elf.Sym64).Info)
+				sec := sym.(*elf.Sym64).Shndx
+				nm := elfFs.SymbolsName[sym.(*elf.Sym64).Name]
+				fmt.Printf("  %-5d %08x\t%d\t%s\t%s\t%s\t%d\t%s\n", sNdx, v, s, t, b, vis, sec, nm)
+			}
 		}
 	}
 
 }
 
-func printSections(ElfSections ShdrTble, numSec uint16, secOff interface{}) {
+func printSections(ElfSections shdrTble, numSec uint16, secOff interface{}) {
 
 	fmt.Printf("------------------------------------------\n\n\n")
 	switch v := secOff.(type) {
@@ -571,6 +669,7 @@ func printSections(ElfSections ShdrTble, numSec uint16, secOff interface{}) {
 			fmt.Printf("Info: 0x%x\n", section[i].Info)
 			fmt.Printf("Alignment: 0x%x\n", section[i].Addralign)
 			fmt.Printf("Entry Size: 0x%x\n", section[i].Entsize)
+			fmt.Printf("[NR]")
 		}
 	}
 
@@ -636,29 +735,29 @@ func main() {
 
 	if len(os.Args) < 3 {
 		usage()
-		os.Exit(ERROR)
+		os.Exit(f)
 
 	}
 
-	var target ElfFile
+	var target elfFile
 
 	bin := os.Args[2]
-	target.Fh, target.Err = os.Open(bin)
-	checkError(target.Err)
+	target.Fh, target.err = os.Open(bin)
+	checkError(target.err)
 
 	target.Fh.Read(target.Ident[:16])
 
 	if isElf(target.Ident[:4]) == false {
-		fmt.Println("This is not an Elf binary\n")
+		fmt.Println("This is not an Elf binary")
 		os.Exit(1)
 	}
-	target.SetArch()
-	target.MapHeader()
+	target.setArch()
+	target.mapHeader()
 
 	options := os.Args[1]
 	if options[0] != '-' {
 		usage()
-		os.Exit(ERROR)
+		os.Exit(f)
 	}
 
 	var optHeader, optSections, optSymbols, optRelocations, optTest bool
@@ -676,7 +775,7 @@ func main() {
 			optTest = true
 		default:
 			fmt.Println("Unrecognizable parameters")
-			os.Exit(ERROR)
+			os.Exit(f)
 		}
 	}
 
@@ -723,9 +822,9 @@ func usage() {
 	fmt.Println("Usage information")
 }
 
-func checkError(checkError error) {
-	if checkError != nil {
-		panic(checkError)
+func checkError(e error) {
+	if e != nil {
+		panic(e)
 	}
 }
 
