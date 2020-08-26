@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"unsafe"
 )
 
@@ -657,37 +658,102 @@ func printSections(ElfSections shdrTble, numSec uint16, secOff interface{}) {
 	}
 
 	if section, ok := ElfSections.Section.([]elf.Section32); ok {
+		fmt.Println("[NR]  Name\t\t\tType\t\tAddress\t\t\tOffsets")
+		fmt.Println("      Size\t\t\tEntSize\t\tFlags Link Info\t\tAlign")
 		for i := uint16(0); i < numSec; i++ {
-			fmt.Printf("Section Number: %d\n", i)
-			fmt.Printf("Name: %s\n", ElfSections.SectionName[i])
-			fmt.Printf("Type: %s\n", elf.SectionType(section[i].Type))
-			fmt.Printf("Flags: %s\n", elf.SectionFlag(section[i].Flags))
-			fmt.Printf("Address: 0x%x\n", section[i].Addr)
-			fmt.Printf("Offset: 0x%x\n", section[i].Off)
-			fmt.Printf("Size: 0x%x\n", section[i].Size)
-			fmt.Printf("Link: 0x%x\n", section[i].Link)
-			fmt.Printf("Info: 0x%x\n", section[i].Info)
-			fmt.Printf("Alignment: 0x%x\n", section[i].Addralign)
-			fmt.Printf("Entry Size: 0x%x\n", section[i].Entsize)
-			fmt.Printf("[NR]")
+			a := section[i].Addr
+			o := section[i].Off
+			s := section[i].Size
+			e := section[i].Entsize
+			l := section[i].Link
+			f := flagToKey(fmt.Sprintf("%s", elf.SectionFlag(section[i].Flags)))
+			info := section[i].Info
+			align := section[i].Addralign
+			nm := ElfSections.SectionName[i]
+
+			/* SHT_REL string throws off alignment, this is a hack to maintain alignment for display purposes */
+			t := fmt.Sprintf("%s", elf.SectionType(section[i].Type))
+			if t == "SHT_REL" {
+				t += " "
+			}
+
+			fmt.Printf("[%-2d]  %-20s\t%s\t%08x\t\t%08x\n", i, nm, t, a, o)
+			fmt.Printf("      %08x\t\t\t%08x\t  %-5s%-5d%d\t\t%5d\n", s, e, f, l, info, align)
 		}
 	}
 
 	if section, ok := ElfSections.Section.([]elf.Section64); ok {
+		fmt.Println("[NR]  Name\t\t\tType\t\tAddress\t\t\tOffsets")
+		fmt.Println("      Size\t\t\tEntSize\t\tFlags Link Info\t\tAlign")
 		for i := uint16(0); i < numSec; i++ {
-			fmt.Printf("------------------------------------------\n\n\n")
-			fmt.Printf("Section Number: %d\n", i)
-			fmt.Printf("Name: %s\n", ElfSections.SectionName[i])
-			fmt.Printf("Type: %s\n", elf.SectionType(section[i].Type))
-			fmt.Printf("Flags: %s\n", elf.SectionFlag(section[i].Flags))
-			fmt.Printf("Address: 0x%x\n", section[i].Addr)
-			fmt.Printf("Offset: 0x%x\n", section[i].Off)
-			fmt.Printf("Size: 0x%x\n", section[i].Size)
-			fmt.Printf("Link: 0x%x\n", section[i].Link)
-			fmt.Printf("Info: 0x%x\n", section[i].Info)
-			fmt.Printf("Alignment: 0x%x\n", section[i].Addralign)
-			fmt.Printf("Entry Size: 0x%x\n", section[i].Entsize)
+			t := elf.SectionType(section[i].Type)
+			a := section[i].Addr
+			o := section[i].Off
+			s := section[i].Size
+			e := section[i].Entsize
+			l := section[i].Link
+			f := flagToKey(fmt.Sprintf("%s", elf.SectionFlag(section[i].Flags)))
+			info := section[i].Info
+			align := section[i].Addralign
+			nm := ElfSections.SectionName[i]
+			fmt.Printf("[%-2d]  %-20s\t%s\t%016x\t%08x\n", i, nm, t, a, o)
+			fmt.Printf("      %016x\t\t%016x  %-5s%-5d%d\t\t%5d\n", s, e, f, l, info, align)
 		}
+	}
+}
+
+func flagToKey(flag string) (key string) {
+
+	if strings.Contains(flag, "SHF_WRITE") {
+		key += "W"
+	}
+
+	if strings.Contains(flag, "SHF_ALLOC") {
+		key += "A"
+	}
+
+	if strings.Contains(flag, "SHF_EXECINSTR") {
+		key += "X"
+	}
+
+	if strings.Contains(flag, "SHF_MERGE") {
+		key += "M"
+	}
+
+	if strings.Contains(flag, "SHF_STRINGS") {
+		key += "S"
+	}
+
+	if strings.Contains(flag, "SHF_INFO_LINK") {
+		key += "I"
+	}
+
+	if strings.Contains(flag, "SHF_LINK_ORDER") {
+		key += "L"
+	}
+
+	if strings.Contains(flag, "SHF_OS_NONCONFORMING") {
+		key += "O"
+	}
+
+	if strings.Contains(flag, "SHF_GROUP") {
+		key += "G"
+	}
+
+	if strings.Contains(flag, "SHF_TLS") {
+		key += "T"
+	}
+
+	if strings.Contains(flag, "SHF_COMPRESSED") {
+		key += "C"
+	}
+
+	if strings.Contains(flag, "SHF_MASKOS") {
+		key += "O"
+	}
+
+	if strings.Contains(flag, "SHF_MASKPROC") {
+		key += "P"
 	}
 	return
 }
@@ -744,6 +810,7 @@ func main() {
 	bin := os.Args[2]
 	target.Fh, target.err = os.Open(bin)
 	checkError(target.err)
+	defer target.Fh.Close()
 
 	target.Fh.Read(target.Ident[:16])
 
@@ -771,8 +838,6 @@ func main() {
 			optSymbols = true
 		case options[i] == 'r':
 			optRelocations = true
-		case options[i] == 't':
-			optTest = true
 		default:
 			fmt.Println("Unrecognizable parameters")
 			os.Exit(f)
