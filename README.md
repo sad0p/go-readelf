@@ -1,3 +1,4 @@
+<pre>
 What is it ?
 
 go-readelf is a small elf binary parser currently capable of printing relocation entries, elf header, sections and Symbols.
@@ -35,4 +36,4 @@ Future work related to this project:
 
 I'm definitely looking forward to writing a parser that is resistant to anti-reverse engineering techniques that corrupt
 Elf meta data to do the point it stops analysis tools like this, but still interpreted and executed correctly.
-
+</pre>
