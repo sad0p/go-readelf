@@ -2,12 +2,15 @@
 What is it ?
 
 go-readelf is a small elf binary parser currently capable of printing relocation entries, elf header, sections and Symbols.
-It utilizes Go's elf package for typing and structure information while performing the mechanics for parsing elf binaries independently. It supports both 32 and 64-bit elf binaries and was tested/built on x86_64 Linux (Arch).
+It utilizes Go's elf package for typing and structure information while performing the mechanics for 
+parsing elf binaries independently. It supports both 32 and 64-bit elf binaries and was tested/built on x86_64 Linux (Arch).
 
 What about binutils readelf ?
 
-This is a pet project really meant to culuminate/expand what I am currently studying out of a book called Linux Binary Analysis (chapter-2). Readelf is about 16k lines of C code, so this is in no way a replacement (it would be a meme to claim it is).
-If you would like to see what elf parsing looks like in Golang then this utility source code certainly helps, maybe for some reason you need a lightweight elf parser. I'd also suggest
+This is a pet project really meant to culuminate/expand what I am currently studying out of a book called Linux Binary Analysis (chapter-2). 
+Readelf is about 16k lines of C code, so this is in no way a replacement (it would be a meme to claim it is).
+If you would like to see what elf parsing looks like in Golang then this utility source code certainly helps, maybe for some reason you need a lightweight elf parser.
+I'd also suggest
 the elf package in Golang.
 
 Installation:
