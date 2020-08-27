@@ -38,5 +38,5 @@ no longer bored and push code to do just that.
 Future work related to this project:
 
 I'm definitely looking forward to writing a parser that is resistant to anti-reverse engineering techniques that corrupt
-Elf meta data to do the point it stops analysis tools like this, but still interpreted and executed correctly.
+Elf meta data to the point it stops analysis tools like this, but binary is still interpreted and executes correctly.
 </pre>
