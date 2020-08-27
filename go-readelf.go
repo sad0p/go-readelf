@@ -11,18 +11,6 @@ import (
 	"unsafe"
 )
 
-// Goals
-// [1] Determine if file is elf binary (abort process if it isn't)
-// [2] Determine architecture of elf binary if it is 32bit or 64bit
-// [3] Abstract away architectural differences from the perspective of main function
-// [4] Create functionality to print elfheader
-// [5] Create functionality to print imported symbols
-// [6] Create functionality to print exported symbols
-// [7] Create functionality to print all symbols
-// [8] Create functionality to print relocation entries
-// [9] Create functionality to print shared library dependencies
-// [10] Create functionality to locate a specific symbol
-
 type enumIdent struct {
 	Endianness binary.ByteOrder
 	Arch       elf.Class
@@ -101,10 +89,6 @@ func (elfFs *elfFile) mapHeader() {
 	case *elf.Header64:
 		elfFs.FileHdr.Machine = elf.Machine(h.Machine)
 	}
-}
-
-func (elfFs *elfFile) findSectionByName(name string) {
-	return
 }
 
 //Section Header Table Offset = Shoff
@@ -647,8 +631,6 @@ func printSymbols(elfFs *elfFile) {
 }
 
 func printSections(ElfSections shdrTble, numSec uint16, secOff interface{}) {
-
-	fmt.Printf("------------------------------------------\n\n\n")
 	switch v := secOff.(type) {
 	case uint32:
 		fmt.Printf("%d Sections @ Offset 0x%x\n", numSec, v)
@@ -700,10 +682,14 @@ func printSections(ElfSections shdrTble, numSec uint16, secOff interface{}) {
 			fmt.Printf("      %016x\t\t%016x  %-5s%-5d%d\t\t%5d\n", s, e, f, l, info, align)
 		}
 	}
+
+	fmt.Println("Key to Flags:")
+	fmt.Println("W (write), A (alloc), X (executable), M (merge), S (strings), I (info)")
+	fmt.Println("L (link order), O (extra os processing required), G (group), T (TLS)")
+	fmt.Println("C (compressed), p (processor specific)")
 }
 
 func flagToKey(flag string) (key string) {
-
 	if strings.Contains(flag, "SHF_WRITE") {
 		key += "W"
 	}
@@ -749,7 +735,7 @@ func flagToKey(flag string) (key string) {
 	}
 
 	if strings.Contains(flag, "SHF_MASKOS") {
-		key += "O"
+		key += "o"
 	}
 
 	if strings.Contains(flag, "SHF_MASKPROC") {
@@ -762,9 +748,13 @@ func printHeader(hdr interface{}) {
 	if h, ok := hdr.(*elf.Header64); ok {
 		fmt.Printf("-------------------------- Elf Header ------------------------\n")
 		fmt.Printf("Magic: % x\n", h.Ident)
+		fmt.Printf("Class: %s\n", elf.Class(h.Ident[elf.EI_CLASS]))
+		fmt.Printf("Data: %s\n", elf.Data(h.Ident[elf.EI_DATA]))
+		fmt.Printf("Version: %s\n", elf.Version(h.Version))
+		fmt.Printf("OS/ABI: %s\n", elf.OSABI(h.Ident[elf.EI_OSABI]))
+		fmt.Printf("ABI Version: %d\n", h.Ident[elf.EI_ABIVERSION])
 		fmt.Printf("Elf Type: %s\n", elf.Type(h.Type))
 		fmt.Printf("Machine: %s\n", elf.Machine(h.Machine))
-		fmt.Printf("Version: %s\n", elf.Version(h.Version))
 		fmt.Printf("Entry: 0x%x\n", h.Entry)
 		fmt.Printf("Program Header Offset: 0x%x\n", h.Phoff)
 		fmt.Printf("Section Header Offset: 0x%x\n", h.Shoff)
@@ -774,15 +764,19 @@ func printHeader(hdr interface{}) {
 		fmt.Printf("Number of Program Header Entries: %d\n", h.Phnum)
 		fmt.Printf("Size of Section Header Entry: %d\n", h.Shentsize)
 		fmt.Printf("Number of Section Header Entries: %d\n", h.Shnum)
-		fmt.Printf("Index In Section Header Table For String Section: %d\n", h.Shstrndx)
+		fmt.Printf("Index of section header string table: %d\n", h.Shstrndx)
 	}
 
 	if h, ok := hdr.(*elf.Header32); ok {
 		fmt.Printf("-------------------------- Elf Header ------------------------\n")
 		fmt.Printf("Magic: % x\n", h.Ident)
+		fmt.Printf("Class: %s\n", elf.Class(h.Ident[elf.EI_CLASS]))
+		fmt.Printf("Data: %s\n", elf.Data(h.Ident[elf.EI_DATA]))
+		fmt.Printf("Version: %s\n", elf.Version(h.Version))
+		fmt.Printf("OS/ABI: %s\n", elf.OSABI(h.Ident[elf.EI_OSABI]))
+		fmt.Printf("ABI Version: %d\n", h.Ident[elf.EI_ABIVERSION])
 		fmt.Printf("Elf Type: %s\n", elf.Type(h.Type))
 		fmt.Printf("Machine: %s\n", elf.Machine(h.Machine))
-		fmt.Printf("Version: %s\n", elf.Version(h.Version))
 		fmt.Printf("Entry: 0x%x\n", h.Entry)
 		fmt.Printf("Program Header Offset: 0x%x\n", h.Phoff)
 		fmt.Printf("Section Header Offset: 0x%x\n", h.Shoff)
@@ -792,13 +786,12 @@ func printHeader(hdr interface{}) {
 		fmt.Printf("Number of Program Header Entries: %d\n", h.Phnum)
 		fmt.Printf("Size of Section Header Entry: %d\n", h.Shentsize)
 		fmt.Printf("Number of Section Header Entries: %d\n", h.Shnum)
-		fmt.Printf("Index In Section Header Table For String Section: %d\n", h.Shstrndx)
+		fmt.Printf("Index of section header string table: %d\n", h.Shstrndx)
 	}
 	return
 }
 
 func main() {
-
 	if len(os.Args) < 3 {
 		usage()
 		os.Exit(f)
@@ -827,7 +820,7 @@ func main() {
 		os.Exit(f)
 	}
 
-	var optHeader, optSections, optSymbols, optRelocations, optTest bool
+	var optHeader, optSections, optSymbols, optRelocations bool
 	for i := 1; i < len(options); i++ {
 		switch {
 		case options[i] == 'h':
@@ -877,14 +870,15 @@ func main() {
 		printRelocations(&target)
 
 	}
-
-	if optTest {
-		fmt.Println(resolveRelocType(7, elf.EM_X86_64))
-	}
 }
 
 func usage() {
-	fmt.Println("Usage information")
+	fmt.Printf("Usage: %s [-hrsS]\n", os.Args[0])
+	fmt.Println("\t-h: View Elf header")
+	fmt.Println("\t-r: View relocation entries")
+	fmt.Println("\t-s: View symbols")
+	fmt.Println("\t-S: View Sections")
+	fmt.Println("\t-l: View program headers")
 }
 
 func checkError(e error) {
