@@ -7,8 +7,8 @@ parsing elf binaries independently. It supports both 32 and 64-bit elf binaries 
 
 What about binutils readelf ?
 
-This is a pet project really meant to culuminate/expand what I am currently studying out of a book called Linux Binary Analysis (chapter-2). 
-Readelf is about 16k lines of C code, so this is in no way a replacement (it would be a meme to claim it is).
+This is a pet project really meant to culuminate/expand what I am currently studying out of a book called 
+Linux Binary Analysis (chapter-2). Readelf is about 16k lines of C code, so this is in no way a replacement (it would be a meme to claim it is).
 If you would like to see what elf parsing looks like in Golang then this utility source code certainly helps, maybe for some reason you need a lightweight elf parser.
 I'd also suggest
 the elf package in Golang.
