@@ -1,4 +1,3 @@
-<pre>
 What is it ?
 
 go-readelf is a small elf binary parser currently capable of printing relocation entries, elf header, sections and Symbols.
@@ -14,7 +13,7 @@ I'd also suggest
 the elf package in Golang.
 
 Installation:
-
+<pre>
 [terminal]$ git clone https://github.com/sad0p/go-readelf.git
 [terminal]$ cd go-readelf
 [terminal]$ go build go-readelf.go
@@ -26,9 +25,9 @@ Usage: ./go-readelf [-hrsS]
         -S: View Sections
         -l: View program headers
 [terminal]$ 
-
+</pre>
 Source code quality:
-I'm a fairly new to Go, as a matter of fact this is the first application I've written in the language, refactoring
+I'm fairly new to Go, as a matter of fact this is the first application I've written in the language, refactoring
 along the lines of the Effective Go guidelines are welcomed if I missed anything.
 
 Needed improvements:
@@ -39,4 +38,3 @@ Future work related to this project:
 
 I'm definitely looking forward to writing a parser that is resistant to anti-reverse engineering techniques that corrupt
 Elf meta data to the point it stops analysis tools like this, but binary is still interpreted and executes correctly.
-</pre>
