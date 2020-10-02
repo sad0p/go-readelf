@@ -873,7 +873,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Printf("Usage: %s [-hrsS]\n", os.Args[0])
+	fmt.Printf("Usage: %s [-hrsS] <target-binary>\n", os.Args[0])
 	fmt.Println("\t-h: View Elf header")
 	fmt.Println("\t-r: View relocation entries")
 	fmt.Println("\t-s: View symbols")
