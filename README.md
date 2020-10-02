@@ -18,7 +18,7 @@ Installation:
 [terminal]$ cd go-readelf
 [terminal]$ go build go-readelf.go
 [terminal]$ ./go-readelf
-Usage: ./go-readelf [-hrsS] <target_binary>
+Usage: ./go-readelf [-hrsS] &lt;target-binary&gt;
         -h: View elf header
         -r: View relocation entries
         -s: View symbols
