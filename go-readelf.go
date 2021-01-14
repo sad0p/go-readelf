@@ -820,7 +820,7 @@ func main() {
 		os.Exit(f)
 	}
 
-	var optHeader, optSections, optSymbols, optRelocations bool
+	var optHeader, optSections, optSymbols, optRelocations, optProgHeaders bool
 	for i := 1; i < len(options); i++ {
 		switch {
 		case options[i] == 'h':
@@ -831,6 +831,8 @@ func main() {
 			optSymbols = true
 		case options[i] == 'r':
 			optRelocations = true
+		case options[i] == 'l':
+			optProgHeaders = true
 		default:
 			fmt.Println("Unrecognizable parameters")
 			os.Exit(f)
@@ -869,6 +871,10 @@ func main() {
 		target.getRelocations()
 		printRelocations(&target)
 
+	}
+
+	if optProgHeaders {
+		fmt.Println("Printing program headers not implemented yet")
 	}
 }
 
