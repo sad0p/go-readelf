@@ -38,3 +38,8 @@ Future work related to this project:
 
 I'm definitely looking forward to writing a parser that is resistant to anti-reverse engineering techniques that corrupt
 Elf meta data to the point it stops analysis tools like this, but binary is still interpreted and executes correctly.
+
+
+------------------------------------------ Work In Progress -----------------------------------------------------------------
+
+- Adding program header parsing (2 weeks max from this commit).
