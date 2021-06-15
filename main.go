@@ -317,7 +317,7 @@ func (elfFs *ELFFile) getProgHeaders() {
 				return
 			}
 			flag := elf.ProgFlag(entry.Flags).String()
-			fmt.Printf("  %d\t%d\t%-16s%-4d\t%-8d\t%-8d\t%-4d\t%-4d\t%-4d\n", i, entry.Type, flag, entry.Off, entry.Vaddr, entry.Paddr, entry.Filesz, entry.Memsz, entry.Align)
+			fmt.Printf("  %d\t%d\t%-16s0x%-4s\t0x%-8s\t0x%-8s\t%-4d\t%-4d\t%-4d\n", i, entry.Type, flag, fmt.Sprintf("%X", entry.Off), fmt.Sprintf("%X", entry.Vaddr), fmt.Sprintf("%X", entry.Paddr), entry.Filesz, entry.Memsz, entry.Align)
 		}
 		break
 	case elf.ELFCLASS64:
@@ -349,7 +349,7 @@ func (elfFs *ELFFile) getProgHeaders() {
 				return
 			}
 			flag := elf.ProgFlag(entry.Flags).String()
-			fmt.Printf("  %d\t%d\t%-16s%-4d\t%-8d\t%-8d\t%-4d\t%-4d\t%-4d\n", i, entry.Type, flag, entry.Off, entry.Vaddr, entry.Paddr, entry.Filesz, entry.Memsz, entry.Align)
+			fmt.Printf("  %d\t%d\t%-16s0x%-4s\t0x%-8s\t0x%-8s\t%-4d\t%-4d\t%-4d\n", i, entry.Type, flag, fmt.Sprintf("%X", entry.Off), fmt.Sprintf("%X", entry.Vaddr), fmt.Sprintf("%X", entry.Paddr), entry.Filesz, entry.Memsz, entry.Align)
 		}
 		break
 	}
