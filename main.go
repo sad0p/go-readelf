@@ -294,7 +294,6 @@ func (elfFs *ELFFile) getProgHeaders() {
 			return
 		}
 
-		_ = make([]elf.Prog32, header.Phnum)
 		buffer := make([]byte, header.Phnum*header.Phentsize)
 		_, err := elfFs.Fh.Seek(int64(header.Phoff), 0)
 		if err != nil {
@@ -326,7 +325,6 @@ func (elfFs *ELFFile) getProgHeaders() {
 			return
 		}
 
-		_ = make([]elf.Prog64, header.Phnum)
 		buffer := make([]byte, header.Phnum*header.Phentsize)
 		_, err := elfFs.Fh.Seek(int64(header.Phoff), 0)
 		if err != nil {
@@ -719,10 +717,6 @@ func printSections(ElfSections SHDRTable, numSec uint16, secOff interface{}) {
 	fmt.Println("C (compressed), p (processor specific)")
 }
 
-func printProgHeaders() {
-
-}
-
 func flagToKey(flag string) (key string) {
 	if strings.Contains(flag, "SHF_WRITE") {
 		key += "W"
@@ -909,7 +903,6 @@ func main() {
 
 	if optProgHeaders {
 		target.getProgHeaders()
-		printProgHeaders()
 	}
 }
 
