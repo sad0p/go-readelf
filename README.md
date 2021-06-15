@@ -16,7 +16,7 @@ Installation:
 <pre>
 [terminal]$ git clone https://github.com/sad0p/go-readelf.git
 [terminal]$ cd go-readelf
-[terminal]$ go build go-readelf.go
+[terminal]$ go build -o go-readelf main.go types.go
 [terminal]$ ./go-readelf
 Usage: ./go-readelf [-hrsS] &lt;target-binary&gt;
         -h: View elf header
@@ -42,4 +42,4 @@ Elf meta data to the point it stops analysis tools like this, but binary is stil
 
 ------------------------------------------ Work In Progress -----------------------------------------------------------------
 
-- Adding program header parsing (2 weeks max from this commit).
+- Adding program header parsing (2 weeks max from this commit). -- COMPLETED (thanks to contributor leifiel)
