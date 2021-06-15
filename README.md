@@ -30,9 +30,6 @@ Source code quality:
 I'm fairly new to Go, as a matter of fact this is the first application I've written in the language, refactoring
 along the lines of the Effective Go guidelines are welcomed if I missed anything.
 
-Needed improvements:
-I purposely didn't implement the ability to print program headers, hopefully someone takes up the task before I'm
-no longer bored and push code to do just that.
 
 Future work related to this project:
 
@@ -43,3 +40,4 @@ Elf meta data to the point it stops analysis tools like this, but binary is stil
 ------------------------------------------ Work In Progress -----------------------------------------------------------------
 
 - Adding program header parsing (2 weeks max from this commit). -- COMPLETED (thanks to contributor leifiel)
+- Section header to segment mappings (coming soon)
