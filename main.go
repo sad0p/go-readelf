@@ -11,49 +11,7 @@ import (
 	"unsafe"
 )
 
-type enumIdent struct {
-	Endianness binary.ByteOrder
-	Arch       elf.Class
-	Machine    elf.Machine
-}
-
-type shdrTble struct {
-	Section     interface{}
-	SectionName []string
-}
-
-type symtab struct {
-	Symbol     interface{}
-	SymbolName []string
-}
-
-type elfFile struct {
-	Fh          *os.File
-	Ident       [16]byte
-	FileHdr     enumIdent
-	Hdr         interface{}
-	err         error
-	ElfSections shdrTble
-	ElfSymbols  symtab
-	Size        int64
-
-	//      XSections map[uint32]interface{}
-
-	Symbols        map[uint32]interface{}
-	SymbolsName    map[uint32]string
-	DynSymbols     map[uint32]interface{}
-	DynSymbolsName map[uint32]string
-	Rels           map[uint32]interface{} // relocation entries are mapped to section index
-
-}
-
-const (
-	f      int = 1
-	dynSym int = 0xa
-	sym    int = 0xb
-)
-
-func (elfFs *elfFile) setArch() {
+func (elfFs *ELFFile) setArch() {
 	switch elf.Class(elfFs.Ident[elf.EI_CLASS]) {
 	case elf.ELFCLASS64:
 		elfFs.Hdr = new(elf.Header64)
@@ -64,11 +22,11 @@ func (elfFs *elfFile) setArch() {
 		elfFs.FileHdr.Arch = elf.ELFCLASS32
 	default:
 		fmt.Println("Elf Arch Class Invalid !")
-		os.Exit(f)
+		os.Exit(1)
 	}
 }
 
-func (elfFs *elfFile) mapHeader() {
+func (elfFs *ELFFile) mapHeader() {
 
 	switch elf.Data(elfFs.Ident[elf.EI_DATA]) {
 	case elf.ELFDATA2LSB:
@@ -96,7 +54,7 @@ func (elfFs *elfFile) mapHeader() {
 //Size per entry in Section Header Table = Shentsize
 //Calculate the size of Section Header Table = Shnum * Shentsize
 
-func (elfFs *elfFile) getSections() {
+func (elfFs *ELFFile) getSections() {
 
 	if h, ok := elfFs.Hdr.(*elf.Header64); ok {
 		shdrTableSize := h.Shentsize * h.Shnum
@@ -148,13 +106,12 @@ func (elfFs *elfFile) getSections() {
 	}
 }
 
-func (elfFs *elfFile) getSymbols() {
-
+func (elfFs *ELFFile) getSymbols() {
 	var dsymtabNdx uint32
 	if dsymtabNdx = getSectionNdx(".dynsym", elfFs); dsymtabNdx != 0 {
 		var dynstrNdx uint32
 		dynstrNdx = getSectionNdx(".dynstr", elfFs)
-		elfFs.loadSymbols(dsymtabNdx, dynstrNdx, dynSym)
+		elfFs.loadSymbols(dsymtabNdx, dynstrNdx, DynSym)
 
 		fmt.Printf("%d entries found in .dynsym\n", len(elfFs.DynSymbols))
 		printSymbols(elfFs)
@@ -166,7 +123,7 @@ func (elfFs *elfFile) getSymbols() {
 	var symstrNdx uint32
 	if symtabNdx = getSectionNdx(".symtab", elfFs); symtabNdx != 0 {
 		symstrNdx = getSectionNdx(".strtab", elfFs)
-		elfFs.loadSymbols(symtabNdx, symstrNdx, sym)
+		elfFs.loadSymbols(symtabNdx, symstrNdx, Sym)
 		fmt.Printf("%d entries found in .symtab\n", len(elfFs.Symbols))
 		printSymbols(elfFs)
 	} else {
@@ -174,7 +131,7 @@ func (elfFs *elfFile) getSymbols() {
 	}
 }
 
-func (elfFs *elfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType int) {
+func (elfFs *ELFFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType int) {
 	switch elfFs.FileHdr.Arch {
 	case elf.ELFCLASS32:
 		var sym32 elf.Sym32
@@ -194,7 +151,7 @@ func (elfFs *elfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 		err := binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, strtab)
 		checkError(err)
 
-		if symType == sym {
+		if symType == Sym {
 			elfFs.Symbols = make(map[uint32]interface{})
 			elfFs.SymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -209,7 +166,7 @@ func (elfFs *elfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 			}
 		}
 
-		if symType == dynSym {
+		if symType == DynSym {
 			elfFs.DynSymbols = make(map[uint32]interface{})
 			elfFs.DynSymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -242,7 +199,7 @@ func (elfFs *elfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 		err := binary.Read(shstrtabSec, elfFs.FileHdr.Endianness, strtab)
 		checkError(err)
 
-		if symType == sym {
+		if symType == Sym {
 			elfFs.Symbols = make(map[uint32]interface{})
 			elfFs.SymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -257,7 +214,7 @@ func (elfFs *elfFile) loadSymbols(sectionNdx uint32, symstrNdx uint32, symType i
 			}
 		}
 
-		if symType == dynSym {
+		if symType == DynSym {
 			elfFs.DynSymbols = make(map[uint32]interface{})
 			elfFs.DynSymbolsName = make(map[uint32]string)
 			n := int64(off + symtabSize)
@@ -278,7 +235,7 @@ func getSymbolName(symIndex uint32, sectionStrtab []byte) string {
 	return getSectionName(symIndex, sectionStrtab)
 }
 
-func getSectionNdx(name string, elfFs *elfFile) uint32 {
+func getSectionNdx(name string, elfFs *ELFFile) uint32 {
 	var ndx uint32
 	for ndx = 0; ndx < uint32(len(elfFs.ElfSections.SectionName)); ndx++ {
 		if elfFs.ElfSections.SectionName[ndx] == name {
@@ -302,7 +259,7 @@ func getSectionName(sIndex uint32, sectionShstrTab []byte) string {
 	return name.String()
 }
 
-func getSectionByType(t elf.SectionType, elfFs *elfFile) []uint32 {
+func getSectionByType(t elf.SectionType, elfFs *ELFFile) []uint32 {
 
 	var indexList []uint32
 
@@ -325,8 +282,79 @@ func getSectionByType(t elf.SectionType, elfFs *elfFile) []uint32 {
 	return indexList
 }
 
-func (elfFs *elfFile) getRelocations() {
+func (elfFs *ELFFile) getProgHeaders() {
+	fmt.Printf("%d program header entries\n", elfFs.Hdr.(*elf.Header64).Phnum)
+	fmt.Printf("  \t\t\t\t\tAddress\t\t\t\tSize\n")
+	fmt.Printf("  Num:\tType\tFlags\t\tOffset\tVirtual\t\tPhysical\tFile\tMemory\tAlign\n")
 
+	switch elfFs.FileHdr.Arch {
+	case elf.ELFCLASS32:
+		header, ok := elfFs.Hdr.(*elf.Header32)
+		if !ok {
+			return
+		}
+
+		buffer := make([]byte, header.Phnum*header.Phentsize)
+		_, err := elfFs.Fh.Seek(int64(header.Phoff), 0)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		_, err = io.ReadFull(elfFs.Fh, buffer)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		for i := 0; i < int(header.Phnum); i++ {
+			buf := bytes.NewBuffer(buffer[i*int(header.Phentsize) : (i+1)*int(header.Phentsize)])
+			entry := &elf.Prog32{}
+			err = binary.Read(buf, elfFs.FileHdr.Endianness, entry)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			flag := elf.ProgFlag(entry.Flags).String()
+			fmt.Printf("  %d\t%d\t%-16s0x%-4s\t0x%-8s\t0x%-8s\t%-4d\t%-4d\t%-4d\n", i, entry.Type, flag, fmt.Sprintf("%X", entry.Off), fmt.Sprintf("%X", entry.Vaddr), fmt.Sprintf("%X", entry.Paddr), entry.Filesz, entry.Memsz, entry.Align)
+		}
+		break
+	case elf.ELFCLASS64:
+		header, ok := elfFs.Hdr.(*elf.Header64)
+		if !ok {
+			return
+		}
+
+		buffer := make([]byte, header.Phnum*header.Phentsize)
+		_, err := elfFs.Fh.Seek(int64(header.Phoff), 0)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		_, err = io.ReadFull(elfFs.Fh, buffer)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		for i := 0; i < int(header.Phnum); i++ {
+			buf := bytes.NewBuffer(buffer[i*int(header.Phentsize) : (i+1)*int(header.Phentsize)])
+			entry := &elf.Prog64{}
+			err = binary.Read(buf, elfFs.FileHdr.Endianness, entry)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			flag := elf.ProgFlag(entry.Flags).String()
+			fmt.Printf("  %d\t%d\t%-16s0x%-4s\t0x%-8s\t0x%-8s\t%-4d\t%-4d\t%-4d\n", i, entry.Type, flag, fmt.Sprintf("%X", entry.Off), fmt.Sprintf("%X", entry.Vaddr), fmt.Sprintf("%X", entry.Paddr), entry.Filesz, entry.Memsz, entry.Align)
+		}
+		break
+	}
+
+}
+
+func (elfFs *ELFFile) getRelocations() {
 	elfFs.Rels = make(map[uint32]interface{})
 	if s, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
 		for sNdx := uint32(0); sNdx < uint32(len(s)); sNdx++ {
@@ -404,7 +432,7 @@ func resolveRelocType(rType uint32, mType elf.Machine) string {
 	}
 }
 
-func printRelocations(elfFs *elfFile) {
+func printRelocations(elfFs *ELFFile) {
 	if _, ok := elfFs.ElfSections.Section.([]elf.Section32); ok {
 		for k, v := range elfFs.Rels {
 			sName := elfFs.ElfSections.SectionName[k]
@@ -436,7 +464,7 @@ func printRelocations(elfFs *elfFile) {
 						symName = elfFs.SymbolsName[symbol.(*elf.Sym32).Name]
 					default:
 						fmt.Printf("f when locating symbol tables in printRelocations()")
-						os.Exit(f)
+						os.Exit(1)
 					}
 					symValue = symbol.(*elf.Sym32).Value
 					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s\n", o, i, relName, symValue, symName)
@@ -467,7 +495,7 @@ func printRelocations(elfFs *elfFile) {
 						symName = elfFs.SymbolsName[symbol.(*elf.Sym32).Name]
 					default:
 						fmt.Printf("f when locating symbol tables in printRelocations()")
-						os.Exit(f)
+						os.Exit(1)
 					}
 					symValue = symbol.(*elf.Sym32).Value
 					if s != uint32(elf.SHN_UNDEF) {
@@ -510,7 +538,7 @@ func printRelocations(elfFs *elfFile) {
 						symName = elfFs.SymbolsName[symbol.(*elf.Sym64).Name]
 					default:
 						fmt.Printf("f when locating symbol tables in printRelocations()")
-						os.Exit(f)
+						os.Exit(1)
 					}
 					symValue = symbol.(*elf.Sym64).Value
 					fmt.Printf("%016x\t%016x\t%s\t%016x\t\t%s\n", o, i, relName, symValue, symName)
@@ -543,7 +571,7 @@ func printRelocations(elfFs *elfFile) {
 						symName = elfFs.SymbolsName[symbol.(*elf.Sym64).Name]
 					default:
 						fmt.Printf("Error when locating symbol tables in printRelocations()")
-						os.Exit(f)
+						os.Exit(1)
 					}
 					symValue = symbol.(*elf.Sym64).Value
 					if s != uint32(elf.SHN_UNDEF) {
@@ -556,7 +584,7 @@ func printRelocations(elfFs *elfFile) {
 	}
 }
 
-func printSymbols(elfFs *elfFile) {
+func printSymbols(elfFs *ELFFile) {
 	var symPresent, dsymPresent bool
 	var ndsym, nsym int
 
@@ -630,7 +658,7 @@ func printSymbols(elfFs *elfFile) {
 
 }
 
-func printSections(ElfSections shdrTble, numSec uint16, secOff interface{}) {
+func printSections(ElfSections SHDRTable, numSec uint16, secOff interface{}) {
 	switch v := secOff.(type) {
 	case uint32:
 		fmt.Printf("%d Sections @ Offset 0x%x\n", numSec, v)
@@ -794,11 +822,11 @@ func printHeader(hdr interface{}) {
 func main() {
 	if len(os.Args) < 3 {
 		usage()
-		os.Exit(f)
+		os.Exit(1)
 
 	}
 
-	var target elfFile
+	var target ELFFile
 
 	bin := os.Args[2]
 	target.Fh, target.err = os.Open(bin)
@@ -817,7 +845,7 @@ func main() {
 	options := os.Args[1]
 	if options[0] != '-' {
 		usage()
-		os.Exit(f)
+		os.Exit(1)
 	}
 
 	var optHeader, optSections, optSymbols, optRelocations, optProgHeaders bool
@@ -835,7 +863,7 @@ func main() {
 			optProgHeaders = true
 		default:
 			fmt.Println("Unrecognizable parameters")
-			os.Exit(f)
+			os.Exit(1)
 		}
 	}
 
@@ -874,7 +902,7 @@ func main() {
 	}
 
 	if optProgHeaders {
-		fmt.Println("Printing program headers not implemented yet")
+		target.getProgHeaders()
 	}
 }
 
